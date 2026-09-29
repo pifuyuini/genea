@@ -1,27 +1,38 @@
 name: Public preview release
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+    paths:
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
   package:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0-preview.1' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_VERSION }}
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Run Python tests
         run: python -B -m unittest discover -s tests -p 'test_*.py'
       - name: Package public source
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
         run: python -B scripts/build_source.py --version "$RELEASE_VERSION"
       - name: Publish preview download
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_VERSION: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_VERSION" .release/*-source.zip --verify-tag --prerelease --title "Genea $RELEASE_VERSION" --notes-file PUBLICATION.md
+        run: |
+          if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo "Release already exists: $RELEASE_VERSION"
+            exit 0
+          fi
+          gh release create "$RELEASE_VERSION" .release/*-source.zip --verify-tag --prerelease --title "Genea $RELEASE_VERSION" --notes-file PUBLICATION.md
