@@ -1,0 +1,52 @@
+/* Public demo controls; the desktop application's visual system is unchanged. */
+body[data-readonly] .generation-menu-wrap,
+body[data-readonly] #add-first-generation,
+body[data-readonly] #link-mode,
+body[data-readonly] #history-undo,
+body[data-readonly] #history-redo,
+body[data-readonly] #history-redo + .toolbar-divider,
+body[data-readonly] .lane-actions,
+body[data-readonly] .lane-empty,
+body[data-readonly] .lane-name > .icon,
+body[data-readonly] .photo-actions,
+body[data-readonly] .photo-overlay,
+body[data-readonly] .photo-hint,
+body[data-readonly] #person-save,
+body[data-readonly] #person-delete,
+body[data-readonly] #person-relative-field,
+body[data-readonly] .relative-edit,
+body[data-readonly] #relationship-save,
+body[data-readonly] #relationship-delete {
+  display: none !important;
+}
+body[data-readonly] .lane-name:disabled {
+  opacity: 1;
+  cursor: default;
+  color: inherit;
+}
+body[data-readonly] .photo-picker {
+  cursor: default;
+  pointer-events: none;
+}
+body[data-readonly] .person-node { cursor: pointer; }
+body[data-readonly] #person-name:read-only,
+body[data-readonly] .inspector-fields textarea:read-only,
+body[data-readonly] .inspector-fields select:disabled,
+body[data-readonly] .segmented input:disabled + span {
+  opacity: 1;
+  color: var(--ink);
+  -webkit-text-fill-color: currentColor;
+  cursor: default;
+}
+body[data-readonly] #camera-zoom-out { border-left: 0; }
+.demo-download {
+  text-decoration: none;
+  white-space: nowrap;
+}
+@media (max-width: 719px) {
+  .demo-download { padding-inline: 9px; font-size: 12px; }
+}
+
+/* The editable UI keys visibility off its link button; the demo keeps browse/relationship. */
+body[data-readonly] .mode-switcher:has(#perspective-mode:not([hidden])) { display: flex; }
+body[data-readonly] .segmented input:disabled { opacity: 0; cursor: default; }

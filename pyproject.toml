@@ -1,0 +1,7 @@
+[project]
+name = "genea"
+version = "0.1.0"
+description = "Local genealogy editor and visualization prototype"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

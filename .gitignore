@@ -1,0 +1,12 @@
+/data/
+/tmp/
+/publish/
+/.venv/
+/.release/
+/dist/
+/build/
+/demo/.runtime/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
