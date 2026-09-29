@@ -4,7 +4,7 @@
 
 **当前版本：0.1.0-preview.1（预览版）。** 功能与数据模型还会调整。
 
-[在线 Demo（启用 Pages 后可用）](https://pifuyuini.github.io/genea/) · [下载完整版源码 ZIP](https://github.com/pifuyuini/genea/archive/refs/tags/v0.1.0-preview.1.zip) · [版本说明与精简源码包](https://github.com/pifuyuini/genea/releases/tag/v0.1.0-preview.1)
+[在线体验《红楼梦》Demo](https://pifuyuini.github.io/genea/) · [下载源码 ZIP](https://github.com/pifuyuini/genea/releases/download/v0.1.0-preview.1/genea-v0.1.0-preview.1-source.zip) · [版本说明](https://github.com/pifuyuini/genea/releases/tag/v0.1.0-preview.1)
 
 ![Genea《红楼梦》演示全貌](demo/screenshots/01-overview.jpg)
 
@@ -93,7 +93,9 @@ python3 -m http.server 8000 --directory docs
 
 打开 <http://127.0.0.1:8000>。不要直接双击 HTML 文件；浏览器需要通过 HTTP 读取静态 JSON。构建时预先计算全部人物对的关系路径；Pages 只读取公开 JSON 和图片，所有编辑入口均禁用。网站资源使用相对路径，支持项目子路径。
 
-首次启用由仓库所有者在 **Settings → Pages → Build and deployment** 中完成：Source 选 **Deploy from a branch**，Branch 选 **main**，文件夹选 **/docs**，点击 **Save**。部署完成后访问 <https://pifuyuini.github.io/genea/>。
+公开 Demo 已上线：<https://pifuyuini.github.io/genea/>。无需安装即可体验只读浏览；本地编辑请下载源码包并按上方指引启动。
+
+若在自己的仓库部署，进入 **Settings → Pages → Build and deployment**：Source 选 **Deploy from a branch**，Branch 选 **main**，文件夹选 **/docs**，点击 **Save**。
 
 源码包可用以下命令重建：
 
