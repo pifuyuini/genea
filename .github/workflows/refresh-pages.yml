@@ -1,0 +1,23 @@
+name: Refresh public Pages
+'on':
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/refresh-pages.yml'
+      - 'docs/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Inspect the existing public Pages source
+        run: gh api "repos/$GH_REPO/pages" --jq '{source, status, build_type, html_url}'
+      - name: Request a build of the configured publishing branch
+        run: gh api --method POST "repos/$GH_REPO/pages/builds"
