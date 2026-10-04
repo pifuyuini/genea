@@ -1,0 +1,433 @@
+{
+  "version": 2,
+  "grid": {
+    "rows": 4,
+    "columns": 4
+  },
+  "style": "literary_realistic_illustration",
+  "sheets": [
+    {
+      "number": 1,
+      "suggested_source_file": "matrix-01.png",
+      "prompt_file": "prompt-01.txt",
+      "portraits": [
+        {
+          "row": 1,
+          "column": 1,
+          "person_id": "person_founder",
+          "name": "何塞·阿尔卡蒂奥·布恩迪亚",
+          "brief": "壮年，浓卷发、短胡须，沉思神情",
+          "output_file": "person_founder.jpg"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "person_id": "person_ursula",
+          "name": "乌尔苏拉·伊瓜兰",
+          "brief": "老年，灰黑盘髻，目光坚定",
+          "output_file": "person_ursula.jpg"
+        },
+        {
+          "row": 1,
+          "column": 3,
+          "person_id": "person_nicanor_ulloa",
+          "name": "尼卡诺尔·乌略亚",
+          "brief": "中年，瘦长脸、络腮胡，朴素衬衣",
+          "output_file": "person_nicanor_ulloa.jpg"
+        },
+        {
+          "row": 1,
+          "column": 4,
+          "person_id": "person_rebeca_montiel",
+          "name": "丽贝卡·蒙铁尔",
+          "brief": "中年，椭圆脸、深色辫发，温和神情",
+          "output_file": "person_rebeca_montiel.jpg"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "person_id": "person_apolinar",
+          "name": "阿波利纳尔·莫斯科特",
+          "brief": "中年，整齐短须，旧式正式外套",
+          "output_file": "person_apolinar.jpg"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "person_id": "person_jose_arcadio",
+          "name": "何塞·阿尔卡蒂奥",
+          "brief": "青年，宽肩、浓眉，深色卷发",
+          "output_file": "person_jose_arcadio.jpg"
+        },
+        {
+          "row": 2,
+          "column": 3,
+          "person_id": "person_colonel",
+          "name": "奥雷里亚诺·布恩迪亚上校",
+          "brief": "中年，清瘦、细胡须，朴素军式外套",
+          "output_file": "person_colonel.jpg"
+        },
+        {
+          "row": 2,
+          "column": 4,
+          "person_id": "person_amaranta",
+          "name": "阿玛兰妲",
+          "brief": "中年，深色盘发与长裙，克制严肃",
+          "output_file": "person_amaranta.jpg"
+        },
+        {
+          "row": 3,
+          "column": 1,
+          "person_id": "person_rebeca",
+          "name": "丽贝卡",
+          "brief": "年轻成年女性，细长脸、深色长发，浅色衣裙",
+          "output_file": "person_rebeca.jpg"
+        },
+        {
+          "row": 3,
+          "column": 2,
+          "person_id": "person_pilar",
+          "name": "庇拉尔·特尔内拉",
+          "brief": "成熟女性，圆润面容、波浪发，暖色披肩",
+          "output_file": "person_pilar.jpg"
+        },
+        {
+          "row": 3,
+          "column": 3,
+          "person_id": "person_remedios_moscote",
+          "name": "蕾梅黛丝·莫斯科特",
+          "brief": "少女，圆脸，浅色高领衣裙，自然端正",
+          "output_file": "person_remedios_moscote.jpg"
+        },
+        {
+          "row": 3,
+          "column": 4,
+          "person_id": "person_amparo",
+          "name": "安帕罗·莫斯科特",
+          "brief": "年轻成年女性，整齐发髻，沉静神情",
+          "output_file": "person_amparo.jpg"
+        },
+        {
+          "row": 4,
+          "column": 1,
+          "person_id": "person_arcadio",
+          "name": "阿尔卡蒂奥",
+          "brief": "青年男性，短发、浓眉、方脸，神情坚定",
+          "output_file": "person_arcadio.jpg"
+        },
+        {
+          "row": 4,
+          "column": 2,
+          "person_id": "person_aureliano_jose",
+          "name": "奥雷里亚诺·何塞",
+          "brief": "青年男性，柔和卷发、较窄脸型",
+          "output_file": "person_aureliano_jose.jpg"
+        },
+        {
+          "row": 4,
+          "column": 3,
+          "person_id": "person_santa_sofia",
+          "name": "桑塔索菲亚·德拉·彼达",
+          "brief": "成熟女性，柔和面容，朴素衣着",
+          "output_file": "person_santa_sofia.jpg"
+        },
+        {
+          "row": 4,
+          "column": 4,
+          "person_id": "person_fernando",
+          "name": "费尔南多·德尔·卡皮奥",
+          "brief": "中年男性，窄脸、灰鬓，旧式正装",
+          "output_file": "person_fernando.jpg"
+        }
+      ],
+      "empty_cells": [],
+      "source_file": "generated/matrix-01.png"
+    },
+    {
+      "number": 2,
+      "suggested_source_file": "matrix-02.png",
+      "prompt_file": "prompt-02.txt",
+      "portraits": [
+        {
+          "row": 1,
+          "column": 1,
+          "person_id": "person_renata_argote",
+          "name": "蕾娜塔·阿尔戈特",
+          "brief": "中年女性，端庄面容，深色披肩",
+          "output_file": "person_renata_argote.jpg"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "person_id": "person_remedios_beauty",
+          "name": "美人儿蕾梅黛丝",
+          "brief": "年轻成年女性，自然清澈的神情，简单浅色衣裙",
+          "output_file": "person_remedios_beauty.jpg"
+        },
+        {
+          "row": 1,
+          "column": 3,
+          "person_id": "person_jose_segundo",
+          "name": "何塞·阿尔卡蒂奥第二",
+          "brief": "中年男性，较窄脸型，冷静，灰绿衬衣",
+          "output_file": "person_jose_segundo.jpg"
+        },
+        {
+          "row": 1,
+          "column": 4,
+          "person_id": "person_aureliano_segundo",
+          "name": "奥雷里亚诺第二",
+          "brief": "中年男性，较圆脸型，爽朗，赭色背心",
+          "output_file": "person_aureliano_segundo.jpg"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "person_id": "person_fernanda",
+          "name": "费尔南达·德尔·卡皮奥",
+          "brief": "中年女性，端正盘髻，深色高领衣裙",
+          "output_file": "person_fernanda.jpg"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "person_id": "person_petra",
+          "name": "佩特拉·科特斯",
+          "brief": "成熟女性，丰润面容、波浪发，暖色服装",
+          "output_file": "person_petra.jpg"
+        },
+        {
+          "row": 2,
+          "column": 3,
+          "person_id": "person_jose_arcadio_v",
+          "name": "何塞·阿尔卡蒂奥（第五代）",
+          "brief": "青年男性，丰满脸型，整齐深色衣着",
+          "output_file": "person_jose_arcadio_v.jpg"
+        },
+        {
+          "row": 2,
+          "column": 4,
+          "person_id": "person_meme",
+          "name": "蕾娜塔·蕾梅黛丝（梅梅）",
+          "brief": "年轻成年女性，柔和卷发，明亮神情",
+          "output_file": "person_meme.jpg"
+        },
+        {
+          "row": 3,
+          "column": 1,
+          "person_id": "person_amaranta_ursula",
+          "name": "阿玛兰妲·乌尔苏拉",
+          "brief": "年轻成年女性，蓬松卷发，活泼，低饱和绿色衣裙",
+          "output_file": "person_amaranta_ursula.jpg"
+        },
+        {
+          "row": 3,
+          "column": 2,
+          "person_id": "person_mauricio",
+          "name": "毛里西奥·巴比伦",
+          "brief": "青年男性，方脸、短发，朴素工作衬衣",
+          "output_file": "person_mauricio.jpg"
+        },
+        {
+          "row": 3,
+          "column": 3,
+          "person_id": "person_gaston",
+          "name": "加斯通",
+          "brief": "成年男性，整齐浅棕发，旅行者风格的旧式外套",
+          "output_file": "person_gaston.jpg"
+        },
+        {
+          "row": 3,
+          "column": 4,
+          "person_id": "person_aureliano_babilonia",
+          "name": "奥雷里亚诺·巴比伦",
+          "brief": "青年男性，清瘦、略凌乱卷发，专注神情",
+          "output_file": "person_aureliano_babilonia.jpg"
+        },
+        {
+          "row": 4,
+          "column": 1,
+          "person_id": "person_aureliano_last",
+          "name": "奥雷里亚诺（末代）",
+          "brief": "新生婴儿，完整包裹在浅色襁褓中，脸部清晰居中",
+          "output_file": "person_aureliano_last.jpg"
+        },
+        {
+          "row": 4,
+          "column": 2,
+          "person_id": "person_a_triste",
+          "name": "奥雷里亚诺·特里斯特",
+          "brief": "成年男性，长脸、短直发，芥末色衬衣",
+          "output_file": "person_a_triste.jpg"
+        },
+        {
+          "row": 4,
+          "column": 3,
+          "person_id": "person_a_centeno",
+          "name": "奥雷里亚诺·森特诺",
+          "brief": "成年男性，宽脸、短胡须，橄榄色衬衣",
+          "output_file": "person_a_centeno.jpg"
+        },
+        {
+          "row": 4,
+          "column": 4,
+          "person_id": "person_a_serrador",
+          "name": "奥雷里亚诺·塞拉多尔",
+          "brief": "成年男性，棱角分明、短卷发，铁锈色衬衣",
+          "output_file": "person_a_serrador.jpg"
+        }
+      ],
+      "empty_cells": [],
+      "source_file": "generated/matrix-02.png"
+    },
+    {
+      "number": 3,
+      "suggested_source_file": "matrix-03.png",
+      "prompt_file": "prompt-03.txt",
+      "portraits": [
+        {
+          "row": 1,
+          "column": 1,
+          "person_id": "person_a_arcaya",
+          "name": "奥雷里亚诺·阿尔卡亚",
+          "brief": "成年男性，宽下颌、整齐黑发，铜棕色衬衣",
+          "output_file": "person_a_arcaya.jpg"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "person_id": "person_a_amador",
+          "name": "奥雷里亚诺·阿玛多",
+          "brief": "老年男性，灰发、灰白短须，温和而疲惫",
+          "output_file": "person_a_amador.jpg"
+        },
+        {
+          "row": 1,
+          "column": 3,
+          "person_id": "person_a_unknown_01",
+          "name": "奥雷里亚诺（未详名01）",
+          "brief": "成年男性，长脸、细胡须，靛蓝衬衣",
+          "output_file": "person_a_unknown_01.jpg"
+        },
+        {
+          "row": 1,
+          "column": 4,
+          "person_id": "person_a_unknown_02",
+          "name": "奥雷里亚诺（未详名02）",
+          "brief": "成年男性，圆脸、无胡须，沙色衬衣",
+          "output_file": "person_a_unknown_02.jpg"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "person_id": "person_a_unknown_03",
+          "name": "奥雷里亚诺（未详名03）",
+          "brief": "成年男性，方脸、短络腮胡，橄榄色衬衣",
+          "output_file": "person_a_unknown_03.jpg"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "person_id": "person_a_unknown_04",
+          "name": "奥雷里亚诺（未详名04）",
+          "brief": "成年男性，窄下巴、卷发，灰蓝色衬衣",
+          "output_file": "person_a_unknown_04.jpg"
+        },
+        {
+          "row": 2,
+          "column": 3,
+          "person_id": "person_a_unknown_05",
+          "name": "奥雷里亚诺（未详名05）",
+          "brief": "成年男性，高颧骨、侧分发，红棕色衬衣",
+          "output_file": "person_a_unknown_05.jpg"
+        },
+        {
+          "row": 2,
+          "column": 4,
+          "person_id": "person_a_unknown_06",
+          "name": "奥雷里亚诺（未详名06）",
+          "brief": "成年男性，宽面颊、细短须，浅米色衬衣",
+          "output_file": "person_a_unknown_06.jpg"
+        },
+        {
+          "row": 3,
+          "column": 1,
+          "person_id": "person_a_unknown_07",
+          "name": "奥雷里亚诺（未详名07）",
+          "brief": "成年男性，椭圆脸、浓短须，深绿色衬衣",
+          "output_file": "person_a_unknown_07.jpg"
+        },
+        {
+          "row": 3,
+          "column": 2,
+          "person_id": "person_a_unknown_08",
+          "name": "奥雷里亚诺（未详名08）",
+          "brief": "成年男性，瘦脸、波浪短发，无胡须，铜色衬衣",
+          "output_file": "person_a_unknown_08.jpg"
+        },
+        {
+          "row": 3,
+          "column": 3,
+          "person_id": "person_a_unknown_09",
+          "name": "奥雷里亚诺（未详名09）",
+          "brief": "成年男性，圆脸、小山羊胡，棕色衬衣",
+          "output_file": "person_a_unknown_09.jpg"
+        },
+        {
+          "row": 3,
+          "column": 4,
+          "person_id": "person_a_unknown_10",
+          "name": "奥雷里亚诺（未详名10）",
+          "brief": "成年男性，方脸、整齐直发，无胡须，奶油色衬衣",
+          "output_file": "person_a_unknown_10.jpg"
+        },
+        {
+          "row": 4,
+          "column": 1,
+          "person_id": "person_a_unknown_11",
+          "name": "奥雷里亚诺（未详名11）",
+          "brief": "成年男性，长脸、卷发与短胡须，灰色衬衣",
+          "output_file": "person_a_unknown_11.jpg"
+        },
+        {
+          "row": 4,
+          "column": 2,
+          "person_id": "person_a_unknown_12",
+          "name": "奥雷里亚诺（未详名12）",
+          "brief": "成年男性，宽额头、浓眉、短直发，暗黄色衬衣",
+          "output_file": "person_a_unknown_12.jpg"
+        }
+      ],
+      "empty_cells": [
+        {
+          "row": 4,
+          "column": 3
+        },
+        {
+          "row": 4,
+          "column": 4
+        }
+      ],
+      "source_file": "generated/matrix-03.png"
+    }
+  ],
+  "generation": {
+    "tool": "OpenAI imagegen",
+    "date": "2026-10-04",
+    "description": "Original literary realistic illustration; fictional character designs, not actors or canonical likenesses."
+  },
+  "crop": {
+    "source_size": 1254,
+    "grid_boundaries": [
+      0,
+      312,
+      627,
+      940,
+      1254
+    ],
+    "inset": 5,
+    "output_size": 256,
+    "format": "jpeg",
+    "quality": 90
+  }
+}

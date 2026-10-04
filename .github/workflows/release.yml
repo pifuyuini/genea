@@ -1,5 +1,5 @@
 name: Public preview release
-on:
+'on':
   push:
     branches:
       - main
@@ -8,31 +8,146 @@ on:
     paths:
       - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing public preview tag to build and release
+        required: true
+        type: string
 permissions:
-  contents: write
+  contents: read
+env:
+  REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_type == 'tag' && github.ref_name || '' }}
+  PYTHONDONTWRITEBYTECODE: '1'
 jobs:
-  package:
+  source:
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.release_tag.outputs.tag }}
     env:
-      RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0-preview.1' }}
+      GENEA_QA_DIR: ${{ github.workspace }}/tmp/ci-source
+      GENEA_TEST_TMP: ${{ github.workspace }}/tmp/ci-source
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ env.RELEASE_VERSION }}
-      - uses: actions/setup-python@v7
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - uses: actions/setup-python@v7.0.0
         with:
-          python-version: '3.12'
+          python-version: '3.12.11'
+      - name: Record the explicitly requested tag
+        id: release_tag
+        run: printf 'tag=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+      - name: Prepare isolated test directories
+        run: |
+          mkdir -p "$GENEA_QA_DIR"
+          printf 'Created by the source CI job.\n' > "$GENEA_QA_DIR/.codex-tmp"
       - name: Run Python tests
+        env:
+          TMPDIR: ${{ github.workspace }}/tmp/ci-source
         run: python -B -m unittest discover -s tests -p 'test_*.py'
       - name: Package public source
-        run: python -B scripts/build_source.py --version "$RELEASE_VERSION"
-      - name: Publish preview download
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+        if: env.REQUESTED_TAG != ''
+        run: python -B scripts/build_source.py --version "$REQUESTED_TAG"
+      - name: Share source ZIP
+        if: env.REQUESTED_TAG != ''
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: public-source
+          path: .release/genea-${{ env.REQUESTED_TAG }}-source.zip
+          if-no-files-found: error
+          include-hidden-files: true
+  macos:
+    needs: source
+    runs-on: macos-14
+    env:
+      BUILD_DIR: tmp/ci-macos
+      GENEA_QA_DIR: ${{ github.workspace }}/tmp/ci-macos
+      GENEA_TEST_TMP: ${{ github.workspace }}/tmp/ci-macos
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - name: Prepare a complete standalone Python runtime
         run: |
-          if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
-            echo "Release already exists: $RELEASE_VERSION"
-            exit 0
+          mkdir -p "$BUILD_DIR"
+          printf 'Created by the macOS CI job.\n' > "$BUILD_DIR/.codex-tmp"
+          curl --fail --location \
+            'https://github.com/astral-sh/python-build-standalone/releases/download/20250708/cpython-3.12.11%2B20250708-aarch64-apple-darwin-install_only.tar.gz' \
+            --output "$BUILD_DIR/cpython.tar.gz"
+          tar -xzf "$BUILD_DIR/cpython.tar.gz" -C "$BUILD_DIR"
+      - name: Run native Python checks
+        env:
+          TMPDIR: ${{ github.workspace }}/tmp/ci-macos
+        run: '"$BUILD_DIR/python/bin/python3.12" -B -m unittest discover -s tests -p ''test_desktop_*.py'''
+      - name: Run Python-oracle Demo2 JavaScript checks
+        env:
+          TMPDIR: ${{ github.workspace }}/tmp/ci-macos
+        run: |
+          "$BUILD_DIR/python/bin/python3.12" -B -m unittest discover -s tests -p 'test_pages_demo2.py'
+      - name: Run standalone JavaScript checks
+        run: |
+          for test in tests/test_*.js; do
+            case "$test" in
+              tests/test_demo2_query.js)
+                echo "Query JavaScript was tested above with Python-generated expected responses."
+                ;;
+              tests/test_motion.js)
+                /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc static/motion.js "$test"
+                ;;
+              *)
+                /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc "$test"
+                ;;
+            esac
+          done
+      - name: Build public arm64 App
+        env:
+          TMPDIR: ${{ github.workspace }}/tmp/ci-macos
+        run: '"$BUILD_DIR/python/bin/python3.12" -B desktop/macos/build_app.py --runtime "$BUILD_DIR/python" --output "$BUILD_DIR/Genea.app"'
+      - name: Verify the actual public native App
+        env:
+          TMPDIR: ${{ github.workspace }}/tmp/ci-macos
+        run: '"$BUILD_DIR/python/bin/python3.12" -B tests/test_desktop_launch.py --app "$BUILD_DIR/Genea.app" --qa-dir "$BUILD_DIR"'
+      - name: Package public macOS download
+        if: env.REQUESTED_TAG != ''
+        run: |
+          mkdir -p .release
+          ditto -c -k --sequesterRsrc --keepParent "$BUILD_DIR/Genea.app" ".release/genea-$REQUESTED_TAG-macos-arm64.zip"
+      - name: Share macOS ZIP
+        if: env.REQUESTED_TAG != ''
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: macos-arm64
+          path: .release/genea-${{ env.REQUESTED_TAG }}-macos-arm64.zip
+          if-no-files-found: error
+          include-hidden-files: true
+  release:
+    needs: [source, macos]
+    if: needs.source.outputs.release_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.source.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.release_tag }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: public-source
+          path: .release
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: macos-arm64
+          path: .release
+      - name: Publish both new preview downloads
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release already exists; its downloads are preserved: $RELEASE_TAG"
+            exit 1
           fi
-          gh release create "$RELEASE_VERSION" .release/*-source.zip --verify-tag --prerelease --title "Genea $RELEASE_VERSION" --notes-file PUBLICATION.md
+          gh release create "$RELEASE_TAG" \
+            ".release/genea-$RELEASE_TAG-source.zip" \
+            ".release/genea-$RELEASE_TAG-macos-arm64.zip" \
+            --verify-tag --prerelease --title "Genea $RELEASE_TAG" --notes-file PUBLICATION.md

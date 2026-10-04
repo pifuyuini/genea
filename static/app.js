@@ -4,6 +4,8 @@ const THEME_QUERY = "(prefers-color-scheme: dark)";
 const THEME_KEY = "genea-appearance";
 const state = {
   workspace: { generations: [], people: {}, relationships: [] },
+  config: { experimental_features_enabled: false, experimental_cross_generation: false, read_only: false, read_only_reason: null },
+  configBusy: false, configError: null, configLoaded: false, configEpoch: 0, advancedQuery: null, checkReport: null,
   // An explicit choice is remembered; otherwise the atlas follows the system appearance.
   theme: localStorage.getItem(THEME_KEY) || (localStorage.getItem("genea-theme") === "mocha" ? "mocha" : null) ||
     (matchMedia(THEME_QUERY).matches ? "mocha" : "latte"),
@@ -12,7 +14,8 @@ const state = {
   perspective: false, selectionA: null, selectionB: null, selectionTarget: "a",
   copyRequestId: 0, copyInFlight: false, relationshipCopyError: null,
   pathRequestId: 0, relationshipPathLoading: false, relationshipCopyText: null,
-  relationshipPathError: null, relationshipPath: null,
+  relationshipPathError: null, relationshipPath: null, relationshipEvidenceOpen: false,
+  relationshipCopiedText: null, relationshipCopiedAt: 0, freshRelationship: null,
   linkMode: false, linkSource: null, drag: null,
   focusedPersonId: null, searchQuery: "", searchActiveIndex: -1,
   activeRelationshipId: null, focusedRelationshipId: null,
@@ -38,72 +41,14 @@ function createIcon(name) {
   return icon;
 }
 
-function isReadonlyDemo() {
-  return typeof window !== "undefined" && window.GeneaDemo?.readonly === true;
-}
-function preventDemoEdit(event) {
-  if (!isReadonlyDemo()) return false;
-  event?.preventDefault();
-  return true;
-}
-function configureReadonlyDemo() {
-  if (!isReadonlyDemo()) return;
-  document.body.dataset.readonly = "true";
-  $(".workspace-title h2").textContent = "示例家谱";
-  $(".sidebar-footer span").textContent = "虚构演示资料 · 不保存修改";
-  $("#select-mode .mode-label").textContent = "浏览";
-  $("#select-mode").dataset.tooltip = "浏览 · V";
-  $(".camera-controls").setAttribute("aria-label", "画布视图");
-  $(".help-header h2").textContent = "浏览示例家谱";
-  $("#load-error p").textContent = "演示数据暂时无法载入，请检查网络后重试。";
-  for (const row of $$(".help-grid dl > div")) {
-    if (/排序或调整代际|建立亲子关系|撤销|重做|保存人物档案/.test(row.textContent)) row.hidden = true;
-    if (row.textContent.includes("编辑 / 连线 / 关系")) {
-      $("dt", row).textContent = "浏览 / 关系";
-      $("dd", row).textContent = "V / R";
-    }
-  }
-  for (const selector of ["#link-mode", "#generation-menu-toggle", "#add-first-generation",
-    "#add-generation-above", "#add-generation-below", "#history-undo", "#history-redo",
-    "#person-photo", "#person-photo-remove", "#person-save", "#person-delete",
-    "#person-relative-add", "#person-relative-confirm", "#relationship-save", "#relationship-delete",
-    "#generation-submit"]) {
-    $(selector).disabled = true;
-  }
-  for (const control of $$("#person-gender input, #relationship-kind input, #person-generation")) {
-    control.disabled = true;
-  }
-  for (const control of $$("#person-name, #person-introduction, #parent-label, #child-label")) {
-    control.readOnly = true;
-    control.removeAttribute("required");
-  }
-  const photo = $(".photo-picker");
-  photo.tabIndex = -1;
-  photo.removeAttribute("role");
-  photo.setAttribute("aria-label", "人物照片");
-  for (const button of $$("button.button[data-close-dialog]")) button.textContent = "关闭";
-  $("[data-close-dialog=relationship-dialog]").setAttribute("aria-label", "关闭关系详情");
-  const download = document.createElement("a");
-  download.className = "primary-button demo-download";
-  download.href = window.GeneaDemo.downloadUrl;
-  download.textContent = "下载完整版";
-  download.setAttribute("aria-label", "下载 Genea 完整版本，在本机编辑自己的家谱");
-  $(".header-actions").prepend(download);
-}
-
 async function api(path, options = {}) {
-  const mutating = options.method && options.method.toUpperCase() !== "GET";
-  if (mutating && isReadonlyDemo()) throw new Error("公开只读演示不保存修改，请下载完整版。");
+  const mutating = options.method && options.method !== "GET" && !["/api/config", "/api/query"].includes(path);
+  if (mutating && !canEditWorkspace()) throw new Error(state.configError || state.config.read_only_reason || "当前家谱只读，请先启用实验性功能");
   if (mutating && (state.mutations || (state.historyBusy && !path.startsWith("/api/history/")))) {
     throw new Error("上一步正在保存，请稍后再试");
   }
   if (mutating) { state.mutations += 1; renderHistory(); renderWorkspaceSaveState(); }
   try {
-    if (isReadonlyDemo()) {
-      const data = await window.GeneaDemo.request(path, options);
-      state.connectionFailed = false;
-      return data;
-    }
     let response;
     try {
       response = await fetch(path, {
@@ -116,13 +61,22 @@ async function api(path, options = {}) {
     }
     state.connectionFailed = false;
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.details?.errors?.join("；") || data.error || "请求失败");
+    if (!response.ok) {
+      const error = new Error(data.details?.errors?.join("；") || data.error || "请求失败");
+      error.status = response.status;
+      if (response.status === 403 && path !== "/api/config") {
+        try { await loadRuntimeConfig(); } catch { /* The explicit retry keeps editing unavailable until configuration is known. */ }
+        render();
+      }
+      throw error;
+    }
+    if (data.config) applyRuntimeConfig(data.config);
     if (mutating) state.saveFailed = false;
     if (data.history) state.history = data.history;
     return data;
   } catch (error) {
     if (mutating) state.saveFailed = true;
-    if (!state.workspaceLoaded && (path === "/api/workspace" || path === "/api/history")) state.workspaceLoadFailed = true;
+    if (!state.workspaceLoaded && ["/api/config", "/api/workspace", "/api/history"].includes(path)) state.workspaceLoadFailed = true;
     throw error;
   } finally {
     if (mutating) { state.mutations -= 1; renderHistory(); }
@@ -152,8 +106,25 @@ function showToast(message, tone = "info", action = null) {
   }
   toast.dataset.tone = tone;
   toast.classList.add("is-visible");
+  toast.classList.remove("is-paused");
   clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(hideToast, action ? 6000 : tone === "error" ? 5200 : 3200);
+  showToast.remaining = action ? 6000 : tone === "error" ? 5200 : 3200;
+  showToast.startedAt = Date.now();
+  showToast.timer = setTimeout(hideToast, showToast.remaining);
+}
+// Pointing at or focusing a toast holds it open; leaving resumes the time that was left.
+function pauseToast() {
+  if (!showToast.timer || !$("#toast").classList.contains("is-visible")) return;
+  clearTimeout(showToast.timer);
+  showToast.timer = null;
+  showToast.remaining = Math.max(900, showToast.remaining - (Date.now() - showToast.startedAt));
+  $("#toast").classList.add("is-paused");
+}
+function resumeToast() {
+  if (showToast.timer || !$("#toast").classList.contains("is-visible")) return;
+  showToast.startedAt = Date.now();
+  showToast.timer = setTimeout(hideToast, showToast.remaining);
+  $("#toast").classList.remove("is-paused");
 }
 // Offer a one-step undo for the mutation that just finished.
 function undoAction() {
@@ -201,8 +172,431 @@ function personName(id) { return personById(id)?.name || "未知人物"; }
 function relationshipEnds(item) {
   return { sourceId: item.source_id ?? item.parent_id, targetId: item.target_id ?? item.child_id };
 }
+function experimentalCrossGeneration() {
+  return experimentsEnabled() && state.config?.experimental_cross_generation === true;
+}
+function crossGenerationRelationships() {
+  const levels = new Map(generations().map((row, index) => [String(row.id), index]));
+  const persons = new Map(people().map((person) => [String(person.id), person]));
+  return relationships().filter((relationship) => {
+    const { sourceId, targetId } = relationshipEnds(relationship);
+    const sourceLevel = levels.get(String(persons.get(String(sourceId))?.generation_id));
+    const targetLevel = levels.get(String(persons.get(String(targetId))?.generation_id));
+    return sourceLevel !== undefined && targetLevel > sourceLevel + 1;
+  });
+}
+function experimentsEnabled() {
+  return state.config?.experimental_features_enabled === true;
+}
+function canEditWorkspace() {
+  return !state.workspaceLoadFailed && !state.config?.read_only && !state.configBusy && !state.configError;
+}
+function advancedQueryState() {
+  return state.advancedQuery ||= { requestId: 0, open: false, loading: false, text: "", resolutions: {}, result: null, error: null };
+}
+function checkReportState() {
+  return state.checkReport ||= { requestId: 0, loading: false, repairing: false, report: null, error: null };
+}
+function invalidateExperimentalTasks() {
+  const query = advancedQueryState(), check = checkReportState();
+  query.requestId += 1;
+  query.loading = false; query.result = null; query.error = null; query.resolutions = {};
+  check.requestId += 1;
+  check.loading = false; check.report = null; check.error = null;
+}
+function applyRuntimeConfig(config) {
+  if (typeof config?.experimental_features_enabled !== "boolean" || typeof config?.read_only !== "boolean") {
+    throw new Error("无法确认实验功能状态，请重新读取设置");
+  }
+  const changed = experimentsEnabled() !== config.experimental_features_enabled ||
+    state.config?.read_only !== config.read_only;
+  state.config = {
+    experimental_features_enabled: config.experimental_features_enabled,
+    experimental_cross_generation: config.experimental_cross_generation === true,
+    read_only: config.read_only, read_only_reason: config.read_only_reason || null,
+  };
+  state.configError = null;
+  state.configLoaded = true;
+  if (changed) {
+    state.configEpoch = (state.configEpoch || 0) + 1;
+    invalidateRelationshipTasks();
+    invalidateExperimentalTasks();
+    cancelActivePersonDrag();
+    state.linkMode = false; state.linkSource = null;
+  }
+}
+async function loadRuntimeConfig() {
+  try { applyRuntimeConfig(await api("/api/config")); }
+  catch (error) { state.configError = error.message; invalidateRelationshipTasks(); invalidateExperimentalTasks(); throw error; }
+}
+function renderWriteAccess() {
+  const locked = !canEditWorkspace();
+  document.body.classList.toggle("workspace-read-only", locked);
+  for (const id of ["add-first-generation", "generation-menu-toggle", "add-generation-above", "add-generation-below", "link-mode",
+    "generation-name", "generation-submit", "person-name", "person-introduction", "person-generation", "person-photo", "person-photo-remove",
+    "person-save", "person-delete", "parent-label", "child-label", "relationship-save", "relationship-delete"]) {
+    const control = document.getElementById ? document.getElementById(id) : $("#" + id);
+    if (control) control.disabled = locked || (id.startsWith("person-") && personEditor.saving) || (id.startsWith("relationship-") && relationshipSaving);
+  }
+  $$(".lane-name, .lane-add, .lane-remove, .lane-empty, .relative-edit, [data-generation-name]").forEach((control) => { control.disabled = locked; });
+  $$('#person-gender input, #relationship-kind input').forEach((control) => { control.disabled = locked || personEditor.saving || relationshipSaving; });
+  $("#person-relative-add").disabled = locked || personEditor.saving;
+  $("#person-relative-confirm").disabled = locked || personEditor.saving || !$("#person-relative-add").value;
+  $(".photo-picker").setAttribute("aria-disabled", String(locked || personEditor.saving));
+  $(".photo-picker").setAttribute("aria-label", locked ? "人物照片，仅可查看" : "选择人物照片，也可以把图片拖到这里");
+  $(".photo-picker").tabIndex = locked ? -1 : 0;
+  $(".photo-actions").hidden = locked;
+  $(".photo-hint").hidden = locked;
+  $("#person-photo-readonly").hidden = !locked;
+  $("#person-photo-readonly").textContent = state.config?.read_only
+    ? "照片仅供查看。重新启用实验性功能后可更换。"
+    : "照片暂不可更改，请先确认实验功能设置。";
+  // A view-only profile closes rather than cancels, and offers no save or delete.
+  $("#person-cancel").textContent = locked ? "关闭" : "取消";
+  $("#person-form").classList.toggle("is-view-only", locked);
+  if (locked && $("#person-dialog").open && !personEditor.saving) setPersonStatus("仅可查看");
+}
+function renderExperimentalControls() {
+  const enabled = experimentsEnabled(), button = $("#experiments-toggle");
+  const switchLocked = Boolean(state.configBusy || state.configError || state.mutations || state.historyBusy || !state.configLoaded);
+  button.setAttribute("aria-pressed", String(enabled));
+  button.setAttribute("aria-busy", String(Boolean(state.configBusy)));
+  button.disabled = switchLocked;
+  $("#experiments-toggle-label").textContent = state.configBusy ? "正在切换…" : enabled ? "实验性功能已启用" : "启用实验性功能";
+  $("#experiments-status").textContent = state.configBusy ? "正在保存这份家谱的实验设置…"
+    : state.configError ? "设置尚未确认，请先重新读取设置"
+    : enabled ? "已启用，下面四项功能一起生效"
+    : state.config?.read_only ? "已关闭；这份家谱含跨代关系，暂时只能查看"
+    : "未启用，打开后下面四项功能一起生效";
+  const labs = $("#labs-toggle");
+  labs.dataset.state = state.configError ? "error" : enabled ? "on" : "off";
+  labs.setAttribute("aria-label", "实验功能：" + (state.configError ? "设置未确认" : enabled ? "已启用" : "未启用"));
+  labs.dataset.tooltip = state.configError ? "实验设置未确认" : enabled ? "实验功能已启用" : "实验功能";
+  $("#labs-popover").dataset.enabled = String(enabled);
+  $("#config-error").hidden = !state.configError;
+  $("#config-error-message").textContent = state.configError || "";
+  $("#config-retry").disabled = Boolean(state.configBusy);
+  $("#workspace-read-only").hidden = !state.config?.read_only;
+  $("#workspace-read-only-reason").textContent = state.config?.read_only_reason || "家谱或历史包含跨代关系。当前仅可查看，重新启用实验性功能后可编辑。";
+  $("#read-only-enable").disabled = switchLocked;
+  const checkLocked = Boolean(state.configBusy || state.configError || state.mutations || !state.configLoaded);
+  $("#check-genealogy").hidden = !enabled;
+  $("#check-genealogy").disabled = checkLocked;
+  $("#labs-run-check").hidden = !enabled;
+  $("#labs-run-check").disabled = checkLocked;
+  $("#advanced-query").hidden = !enabled || !state.workspaceLoaded;
+  if (!enabled) {
+    advancedQueryState().open = false;
+    if ($("#check-dialog").open) $("#check-dialog").close();
+  }
+  renderAdvancedQuery();
+  renderCheckReport();
+  renderWriteAccess();
+  syncSelectionTrayBounds();
+}
+async function toggleExperimentalFeatures() {
+  if (state.configBusy || state.configError || state.mutations || state.historyBusy || $("dialog:modal")) return;
+  if ($("#person-dialog").open && !await closePersonDialog()) return;
+  const enabled = !experimentsEnabled();
+  state.configBusy = true;
+  invalidateRelationshipTasks(); invalidateExperimentalTasks(); cancelActivePersonDrag();
+  state.linkMode = false; state.linkSource = null;
+  renderExperimentalControls(); renderHistory();
+  try {
+    applyRuntimeConfig(await api("/api/config", { method: "POST", body: JSON.stringify({ experimental_features_enabled: enabled }) }));
+    // The open popover already narrates the change; other entry points get a toast.
+    if ($("#labs-popover").hidden) showToast(experimentsEnabled() ? "实验功能已启用：「关系」模式可查看亲戚称呼，也能用一句话查询"
+      : state.config.read_only ? "已关闭实验功能；这份家谱含跨代关系，暂时只能查看" : "已关闭实验功能，回到普通模式", "success");
+  } catch (error) {
+    state.configError = "切换未能确认：" + error.message + "。请重新读取设置。";
+  } finally {
+    state.configBusy = false;
+    render();
+    if (!state.configError && state.perspective) prefetchRelationshipPath();
+    handleCameraResize();
+  }
+}
+async function retryRuntimeConfig() {
+  if (state.configBusy) return;
+  state.configBusy = true; renderExperimentalControls();
+  try {
+    await loadRuntimeConfig();
+    if (!state.workspaceLoaded) await loadWorkspace();
+  } catch (error) { showToast(error.message, "error"); }
+  finally {
+    state.configBusy = false; render();
+    if (!state.configError && state.perspective) prefetchRelationshipPath();
+  }
+}
+function syncSelectionTrayBounds() {
+  const tray = $("#selection-tray");
+  if (tray.hidden) return;
+  const board = $("#generation-board").getBoundingClientRect();
+  if (board.height <= 0) return;
+  const margin = 12;
+  const controls = $(".camera-controls"), camera = controls.getBoundingClientRect();
+  const bottom = !controls.hidden && camera.height > 0
+    ? Math.min(board.bottom - margin, camera.top - margin) : board.bottom - margin;
+  const viewportBottom = window.innerHeight || board.bottom;
+  // The toolbar and compatibility notice can change the canvas top at any width.
+  // Keep the natural panel height, cap long results, and leave room for the camera.
+  const inset = Math.max(margin, viewportBottom - bottom) + "px";
+  const height = Math.max(0, bottom - board.top - margin) + "px";
+  if (tray.style.bottom !== inset) tray.style.bottom = inset;
+  if (tray.style.maxHeight !== height) tray.style.maxHeight = height;
+}
+function toolRequestCurrent(kind, token, workspace, epoch, a, b) {
+  const task = kind === "query" ? advancedQueryState() : checkReportState();
+  return task.requestId === token && state.workspace === workspace && (state.configEpoch || 0) === epoch &&
+    experimentsEnabled() && !state.configBusy && !state.configError && state.selectionA === a && state.selectionB === b;
+}
+function toolText(tag, className, text) {
+  const element = document.createElement(tag);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+function queryExample(kind) {
+  const a = personById(state.selectionA) || people()[0];
+  const b = personById(state.selectionB) || people().find((person) => person.id !== a?.id);
+  if (!a) return;
+  $("#advanced-query-input").value = kind === "pair" && b ? a.name + "和" + b.name + "是什么关系" :
+    a.name + (kind === "siblings" ? "的兄弟姐妹有哪些" : "的子女有哪些");
+  resetAdvancedQueryInput();
+  $("#advanced-query-input").focus();
+}
+function resetAdvancedQueryInput() {
+  const query = advancedQueryState();
+  query.requestId += 1; query.loading = false; query.result = null; query.error = null; query.resolutions = {};
+  query.text = $("#advanced-query-input").value.trim();
+  renderAdvancedQuery();
+}
+async function runAdvancedQuery(reuseResolutions = false) {
+  if (!state.workspaceLoaded || state.workspaceLoadFailed || !experimentsEnabled() || state.configBusy || state.configError) return;
+  const query = advancedQueryState(), text = $("#advanced-query-input").value.trim();
+  if (!text) { query.error = "请先输入想查询的人物或亲属关系"; renderAdvancedQuery(); return; }
+  if (!reuseResolutions || query.text !== text) query.resolutions = {};
+  query.text = text; query.loading = true; query.error = null; query.result = null;
+  const token = ++query.requestId, workspace = state.workspace, epoch = state.configEpoch || 0;
+  const a = state.selectionA, b = state.selectionB;
+  const current = () => toolRequestCurrent("query", token, workspace, epoch, a, b);
+  renderAdvancedQuery();
+  try {
+    const result = await api("/api/query", { method: "POST", body: JSON.stringify({ text, resolutions: query.resolutions }) });
+    if (current()) query.result = result;
+  } catch (error) { if (current()) query.error = error.message; }
+  finally { if (current()) { query.loading = false; renderAdvancedQuery(); } }
+}
+// Query rows keep their text order (name, label) for assistive tech; the portrait is placed visually by CSS.
+function queryAvatar(personId, fallback) {
+  const avatar = document.createElement("span");
+  avatar.className = "query-avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  renderProfileAvatar(avatar, personById(personId) || fallback);
+  return avatar;
+}
+function renderAdvancedQuery() {
+  const query = advancedQueryState(), enabled = experimentsEnabled() && state.workspaceLoaded && !state.workspaceLoadFailed;
+  const open = enabled && query.open;
+  $("#advanced-query").hidden = !enabled || !state.workspaceLoaded;
+  $("#advanced-query-panel").hidden = !open;
+  $("#selection-tray").dataset.view = open ? "query" : "pick";
+  $("#advanced-query-pick").setAttribute("aria-selected", String(!open));
+  $("#advanced-query-toggle").setAttribute("aria-selected", String(open));
+  $("#advanced-query-toggle").setAttribute("aria-expanded", String(open));
+  $("#advanced-query-toggle").disabled = !enabled;
+  $("#advanced-query-submit").disabled = query.loading || !enabled || Boolean(state.configBusy || state.configError);
+  $("#advanced-query-input").disabled = !enabled || Boolean(state.configBusy || state.configError);
+  const result = query.result, status = $("#advanced-query-status"), results = $("#advanced-query-results");
+  const found = result?.status === "success" && result.results?.length;
+  status.textContent = query.loading ? "正在查询已登记的家谱…" : query.error ||
+    (found && result.message ? "找到 " + result.results.length + " 位 · " + result.message : result?.message) ||
+    (result?.status === "needs_disambiguation" ? "有同名人物，请选择具体的人物" : result?.status === "success" ? "找到 " + (result.results?.length || 0) + " 位人物，点选查看关系" :
+      result?.status === "not_found" ? "没有找到相符的人物或亲属" : result?.status === "unsupported" ? "暂不支持这句话，可以试试下面的示例" : "支持查询两人的关系，或查找一人的亲属。按已登记记录回答。");
+  status.dataset.state = query.loading ? "loading" : query.error ? "error" : result?.status || "idle";
+  $("#advanced-query-submit").setAttribute("aria-busy", String(Boolean(query.loading)));
+  results.replaceChildren();
+  const revealKey = enabled && result && !query.loading ? String(query.requestId) : "";
+  results.classList.toggle("is-revealing", Boolean(revealKey) && results.dataset.revealKey !== revealKey);
+  results.dataset.revealKey = revealKey;
+  if (!enabled || !result || query.loading) return;
+  for (const ambiguity of result.ambiguities || []) {
+    const group = document.createElement("section"); group.className = "query-candidates";
+    group.append(toolText("h4", "tool-group-heading", "「" + ambiguity.mention + "」指哪位人物？"));
+    for (const candidate of ambiguity.candidates || []) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "query-candidate";
+      button.append(toolText("strong", "", candidate.name), toolText("small", "", [candidate.generation,
+        candidate.gender === "male" ? "男" : candidate.gender === "female" ? "女" : "", candidate.introduction].filter(Boolean).join(" · ")),
+        queryAvatar(candidate.id, candidate));
+      button.addEventListener("click", () => {
+        if (!experimentsEnabled() || query.result !== result) return;
+        query.resolutions[String(ambiguity.slot)] = candidate.id;
+        runAdvancedQuery(true);
+      });
+      group.append(button);
+    }
+    results.append(group);
+  }
+  for (const item of result.results || []) {
+    const button = document.createElement("button"); button.type = "button"; button.className = "query-result";
+    const direct = item.path_result?.direct_relationship;
+    const inferredLabels = direct?.results?.map((entry) => entry.label) || [];
+    const fallbackLabel = direct?.appellation?.label || item.path_result?.path_text;
+    const label = item.matched_labels?.length
+      ? [...new Set([...item.matched_labels, ...(inferredLabels.length ? inferredLabels : fallbackLabel ? [fallbackLabel] : [])])].join(" · ")
+      : inferredLabels.join("、") || fallbackLabel || "暂无已登记关系链";
+    const person = personById(item.person_id);
+    button.append(toolText("strong", "", item.name || personName(item.person_id)), toolText("small", "", label), createIcon("arrow-up-right"),
+      queryAvatar(item.person_id, { name: item.name }), toolText("span", "query-generation", person ? personGenerationName(person.generation_id) : ""));
+    button.addEventListener("click", () => selectAdvancedQueryResult(result, item));
+    results.append(button);
+  }
+}
+async function selectAdvancedQueryResult(result, item) {
+  if (!experimentsEnabled() || advancedQueryState().result !== result) return;
+  if ($("#person-dialog").open && !await closePersonDialog()) return;
+  if (!experimentsEnabled() || advancedQueryState().result !== result) return;
+  const a = result.source_id, b = item.person_id || result.target_id;
+  if (!personById(a) || !personById(b)) return;
+  invalidateRelationshipTasks(); invalidateExperimentalTasks();
+  state.perspective = true; state.linkMode = false; state.linkSource = null;
+  state.selectionA = a; state.selectionB = b; state.selectionTarget = "b";
+  advancedQueryState().open = false;
+  const path = item.path_result;
+  if (path) {
+    const text = relationshipPathText(path);
+    state.relationshipPath = { ...path, labels: relationshipPathLabels(path, text) };
+    state.relationshipCopyText = relationshipCopySummary(path, text, a, b);
+  }
+  render();
+  if (!path) prefetchRelationshipPath();
+  requestAnimationFrame(() => focusPersonInCanvas(b));
+}
+async function openGenealogyCheck() {
+  if (!experimentsEnabled() || state.configBusy || state.configError) return;
+  $("#check-dialog").showModal();
+  await runGenealogyCheck();
+}
+function closeGenealogyCheck() {
+  const check = checkReportState();
+  check.requestId += 1; check.loading = false;
+  $("#check-dialog").close();
+}
+async function runGenealogyCheck() {
+  if (!experimentsEnabled() || state.configBusy || state.configError || checkReportState().repairing) return;
+  const check = checkReportState();
+  check.loading = true; check.report = null; check.error = null;
+  const token = ++check.requestId, workspace = state.workspace, epoch = state.configEpoch || 0;
+  const a = state.selectionA, b = state.selectionB;
+  const current = () => toolRequestCurrent("check", token, workspace, epoch, a, b);
+  renderCheckReport();
+  try { const report = await api("/api/check"); if (current()) check.report = report; }
+  catch (error) { if (current()) check.error = error.message; }
+  finally { if (current()) { check.loading = false; renderCheckReport(); } }
+}
+function checkLocateButton(label, run) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "check-locate";
+  button.append(createIcon("focus"), document.createTextNode(label));
+  button.addEventListener("click", run);
+  return button;
+}
+function renderCheckReport() {
+  const check = checkReportState(), report = check.report;
+  const status = $("#check-status"), results = $("#check-results"), summary = $("#check-summary");
+  $("#check-refresh").disabled = check.loading || check.repairing || !experimentsEnabled() || Boolean(state.configBusy || state.configError);
+  status.textContent = check.loading ? "正在检查已保存的家谱，检查不会修改资料…" : check.error ||
+    (report?.status === "unreadable" ? "家谱格式无法完整读取，请按下方说明核对文件。" : report ?
+      (report.summary.errors + " 项需要处理 · " + report.summary.notices + " 项资料提醒 · " + report.summary.repairable + " 项可逐项修复") : "检查结果已失效，请重新检查。检查本身不会修改资料。");
+  const readable = experimentsEnabled() && report && report.status !== "unreadable" && !check.loading && !check.error;
+  status.dataset.state = check.loading ? "loading" : check.error || report?.status === "unreadable" ? "error" : readable ? "summary" : "";
+  // The sentence above stays as the live status; the tiles repeat it at a glance.
+  summary.replaceChildren();
+  summary.hidden = !readable;
+  if (readable) {
+    for (const [key, label, tone] of [["errors", "需要处理", "danger"], ["notices", "资料提醒", "notice"], ["repairable", "可逐项修复", "success"]]) {
+      const tile = document.createElement("div");
+      tile.className = "check-stat";
+      tile.dataset.tone = tone;
+      tile.dataset.empty = String(!report.summary?.[key]);
+      tile.setAttribute("aria-hidden", "true");
+      tile.append(toolText("strong", "", String(report.summary?.[key] ?? 0)), toolText("span", "", label));
+      summary.append(tile);
+    }
+  }
+  $("#check-refresh").setAttribute("aria-busy", String(Boolean(check.loading || check.repairing)));
+  results.replaceChildren();
+  const revealKey = experimentsEnabled() && report ? check.requestId + ":" + (report.report_id || "") : "";
+  const reveal = Boolean(revealKey) && results.dataset.revealKey !== revealKey;
+  results.classList.toggle("is-revealing", reveal);
+  summary.classList.toggle("is-revealing", reveal);
+  results.dataset.revealKey = revealKey;
+  if (!experimentsEnabled() || !report) return;
+  if (!report.issues?.length) results.append(toolText("p", "check-empty", "未发现结构问题或资料提醒。"));
+  for (const [severity, title] of [["error", "需要处理"], ["notice", "资料提醒"]]) {
+    const issues = (report.issues || []).filter((issue) => issue.severity === severity);
+    if (!issues.length) continue;
+    const group = document.createElement("section"); group.className = "check-group"; group.dataset.severity = severity;
+    group.append(toolText("h3", "tool-group-heading", title + " · " + issues.length));
+    for (const issue of issues) {
+      const article = document.createElement("article"); article.className = "check-issue"; article.dataset.severity = severity;
+      const marker = createIcon(severity === "error" ? "alert" : "info");
+      marker.classList.add("check-issue-icon");
+      article.append(marker, toolText("p", "check-issue-message", issue.message));
+      const actions = document.createElement("div"); actions.className = "check-issue-actions";
+      for (const id of issue.person_ids || []) {
+        if (!personById(id)) continue;
+        actions.append(checkLocateButton("定位「" + personName(id) + "」", () => { closeGenealogyCheck(); selectSearchResult(id); }));
+      }
+      for (const id of issue.relationship_ids || []) {
+        if (!relationshipById(id)) continue;
+        actions.append(checkLocateButton("定位关系", () => {
+          closeGenealogyCheck(); state.focusedRelationshipId = id; render();
+          focusPersonInCanvas(relationshipEnds(relationshipById(id)).targetId);
+        }));
+      }
+      if (issue.repair) {
+        article.append(toolText("p", "check-repair-description", issue.repair.description));
+        const fix = toolText("button", "button is-small check-fix", issue.repair.label || "修复这一项"); fix.type = "button";
+        fix.disabled = check.repairing || !canEditWorkspace();
+        fix.addEventListener("click", () => repairCheckIssue(report, issue)); actions.append(fix);
+      }
+      if (actions.children.length) article.append(actions);
+      group.append(article);
+    }
+    results.append(group);
+  }
+}
+async function repairCheckIssue(report, issue) {
+  const check = checkReportState();
+  if (!experimentsEnabled() || !canEditWorkspace() || check.repairing || check.report !== report || !issue.repair) return;
+  if (!await askConfirmation(issue.repair.description + " 修复后可以撤销。", { title: issue.repair.label || "修复这一项？", confirmLabel: "确认修复" })) return;
+  if (!experimentsEnabled() || !canEditWorkspace() || check.report !== report) return;
+  check.repairing = true; renderCheckReport();
+  try {
+    const result = await api("/api/check/fix", { method: "POST", body: JSON.stringify({ report_id: report.report_id, issue_id: issue.id }) });
+    replaceWorkspace(result); render();
+    showToast("已修复这一项", "success", undoAction());
+    check.repairing = false;
+    if (experimentsEnabled() && $("#check-dialog").open) await runGenealogyCheck();
+  } catch (error) {
+    check.repairing = false;
+    if (error.status === 409) {
+      showToast("家谱已变化，正在更新检查结果，请核对后再修复", "info");
+      try { await loadWorkspace(); if (experimentsEnabled()) await runGenealogyCheck(); }
+      catch (refreshError) { check.error = refreshError.message; }
+    } else if (experimentsEnabled()) check.error = error.message;
+  } finally { check.repairing = false; renderCheckReport(); }
+}
+
 async function loadWorkspace() {
-  state.workspace = workspaceFrom(await api("/api/workspace"));
+  invalidateRelationshipTasks();
+  invalidateExperimentalTasks();
+  if (state.perspective) renderSelection();
+  // Runtime configuration is never serialized into the workspace or its history.
+  await loadRuntimeConfig();
+  replaceWorkspace(await api("/api/workspace"), false);
   state.history = await api("/api/history");
   state.workspaceLoaded = true;
   state.workspaceLoadFailed = false;
@@ -218,20 +612,27 @@ function reconcileWorkspaceSelection() {
   if (!personById(state.linkSource)) state.linkSource = null;
   if (!relationshipById(state.focusedRelationshipId)) state.focusedRelationshipId = null;
 }
+// All confirmed workspace changes invalidate derived results, even when A/B stays the same.
+function replaceWorkspace(data, refreshRelationship = true) {
+  invalidateRelationshipTasks();
+  invalidateExperimentalTasks();
+  state.workspace = workspaceFrom(data);
+  reconcileWorkspaceSelection();
+  if (refreshRelationship && state.perspective) prefetchRelationshipPath();
+}
 function renderHistory() {
   for (const direction of ["undo", "redo"]) {
     const button = $("#history-" + direction);
     const verb = direction === "undo" ? "撤销" : "重做";
     const label = state.history[direction + "_label"];
-    button.disabled = isReadonlyDemo() || state.historyBusy || state.mutations > 0 || !label;
+    button.disabled = !canEditWorkspace() || state.historyBusy || state.mutations > 0 || !label;
     button.setAttribute("aria-label", label ? verb + "：" + label : verb);
     button.dataset.tooltip = label ? verb + "「" + label + "」 · " + (direction === "undo" ? "⌘/Ctrl Z" : "⌘/Ctrl ⇧Z") : "暂无可" + verb + "的操作";
   }
 }
 async function travelHistory(direction) {
-  if (preventDemoEdit()) return;
   const label = state.history[direction + "_label"];
-  if (!label || state.historyBusy || state.mutations || personEditor.saving || $("dialog:modal")) return;
+  if (!canEditWorkspace() || !label || state.historyBusy || state.mutations || personEditor.saving || $("dialog:modal")) return;
   state.historyBusy = true;
   renderHistory();
   try {
@@ -239,7 +640,7 @@ async function travelHistory(direction) {
     cancelActivePersonDrag();
     invalidateRelationshipTasks();
     const result = await api("/api/history/" + direction, { method: "POST", body: "{}" });
-    state.workspace = workspaceFrom(result);
+    replaceWorkspace(result, false);
     reconcileWorkspaceSelection();
     render({ animate: true });
     if (state.perspective) prefetchRelationshipPath();
@@ -271,6 +672,7 @@ function render({ animate = false, velocities = {} } = {}) {
   renderModeControls();
   renderSearchResults();
   renderHistory();
+  renderExperimentalControls();
   applyCamera();
   if (positions) animateNodesFrom(positions, velocities);
   requestDraw();
@@ -282,12 +684,13 @@ function render({ animate = false, velocities = {} } = {}) {
 function renderWorkspaceSaveState() {
   const output = $("#workspace-save-state");
   if (!output) return;
-  let status = isReadonlyDemo() ? "readonly" : "saved", text = isReadonlyDemo() ? "公开只读演示" : "画布已保存";
+  let status = "saved", text = "画布已保存";
   if (state.mutations) { status = "saving"; text = "保存中…"; }
   else if (state.connectionFailed) { status = "error"; text = "连接失败"; }
   else if (state.saveFailed) { status = "error"; text = "保存失败"; }
   else if (state.workspaceLoadFailed) { status = "error"; text = "载入失败"; }
   else if (!state.workspaceLoaded) { status = "loading"; text = "正在载入"; }
+  else if (state.config?.read_only) { status = "readonly"; text = "仅查看"; }
   else if (personHasChanges()) { status = "draft"; text = "未保存更改"; }
   output.dataset.state = status;
   output.textContent = text;
@@ -369,8 +772,27 @@ function toggleWorkspaceHelp(event) {
   const shouldOpen = $("#help-popover").hidden;
   closeGenerationMenu();
   closeSearchResults();
+  closeLabsPopover();
   $("#help-popover").hidden = !shouldOpen;
   $("#help-toggle").setAttribute("aria-expanded", String(shouldOpen));
+}
+function closeLabsPopover(restoreFocus = false) {
+  const popover = $("#labs-popover");
+  const wasOpen = !popover.hidden;
+  popover.hidden = true;
+  $("#labs-toggle").setAttribute("aria-expanded", "false");
+  if (restoreFocus && wasOpen) $("#labs-toggle").focus({ preventScroll: true });
+  return wasOpen;
+}
+function toggleLabsPopover(event) {
+  event.stopPropagation();
+  const shouldOpen = $("#labs-popover").hidden;
+  closeWorkspaceHelp();
+  closeGenerationMenu();
+  closeSearchResults();
+  $("#labs-popover").hidden = !shouldOpen;
+  $("#labs-toggle").setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && !$("#experiments-toggle").disabled) requestAnimationFrame(() => $("#experiments-toggle").focus({ preventScroll: true }));
 }
 const nodeMotions = new Map();
 function captureNodePositions() {
@@ -391,7 +813,8 @@ function animateNodesFrom(positions, velocities = {}) {
   for (const node of $$(".person-node")) {
     const before = positions.get(node.dataset.personId);
     if (!before) {
-      node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
+      node.animate([{ opacity: 0, transform: "scale(.9)" }, { opacity: 1, transform: "none" }],
+        { duration: 340, easing: "cubic-bezier(.34, 1.56, .64, 1)" });
       continue;
     }
     const after = node.getBoundingClientRect();
@@ -432,6 +855,14 @@ function getCameraViewport() {
   const stageRect = $("#canvas-stage").getBoundingClientRect();
   let right = board.clientWidth;
   let bottom = board.clientHeight;
+  // Notices float over the top edge of the canvas; framing starts below them.
+  let top = 0;
+  for (const selector of ["#config-error", "#workspace-read-only"]) {
+    const banner = $(selector);
+    if (!banner || banner.hidden) continue;
+    const rect = banner.getBoundingClientRect();
+    if (rect.height > 0) top = Math.max(top, rect.top + rect.height - boardRect.top + 8);
+  }
   const inspector = $("#person-dialog");
   if (inspector.open && !matchMedia("(max-width: 719px)").matches) {
     const rect = inspector.getBoundingClientRect();
@@ -466,8 +897,9 @@ function getCameraViewport() {
       bottom = available.height;
     }
   }
+  top = Math.min(top, Math.max(0, bottom - 1));
   return {
-    left: 0, top: 0, width: right, height: bottom,
+    left: 0, top, width: right, height: bottom - top,
     baseX: stageRect.left - boardRect.left - state.camera.x,
     baseY: stageRect.top - boardRect.top - state.camera.y,
   };
@@ -489,7 +921,10 @@ function cameraForWorldCenter(worldX, worldY, scale, viewport) {
 }
 function cameraContentBounds() {
   const lanes = $("#generation-lanes");
-  return { left: 0, top: 0, width: lanes.scrollWidth, height: lanes.scrollHeight };
+  // The SVG is absolute: reserve its outer channels without widening the lane grid.
+  const outerWidth = crossGenerationRelationships().length;
+  return { left: 0, top: 0, width: lanes.scrollWidth + (outerWidth ? (outerWidth + 1) * 24 : 0),
+    height: lanes.scrollHeight };
 }
 function fitBoundsScale(bounds, viewport, padding = 16) {
   if (!bounds.width || !bounds.height) return 1;
@@ -574,12 +1009,28 @@ function applyFitCamera(keepReadable) {
   const camera = cameraForWorldCenter(bounds.left + bounds.width / 2,
     bounds.top + bounds.height / 2, scale, viewport);
   if (keepReadable && bounds.width * scale > viewport.width - 32) {
-    camera.x = viewport.left + 16 - viewport.baseX - bounds.left * scale;
+    // A wide family opens on its earliest generation (where the tree is read from),
+    // kept within the content edges instead of on the blank start of the widest row.
+    const leftAligned = viewport.left + 16 - viewport.baseX - bounds.left * scale;
+    const rightAligned = viewport.left + viewport.width - 16 - viewport.baseX - (bounds.left + bounds.width) * scale;
+    // Narrow screens deliberately start rows at the vertical generation spine.
+    const anchor = matchMedia("(max-width: 719px)").matches ? null : earliestGenerationCenter();
+    camera.x = anchor === null ? leftAligned
+      : Math.min(leftAligned, Math.max(rightAligned, cameraForWorldCenter(anchor, 0, scale, viewport).x));
   }
   if (keepReadable && bounds.height * scale > viewport.height - 32) {
     camera.y = viewport.top + 16 - viewport.baseY - bounds.top * scale;
   }
   moveCameraTo(camera, keepReadable);
+}
+function earliestGenerationCenter() {
+  const stageRect = $("#canvas-stage").getBoundingClientRect();
+  for (const lane of $$(".generation-lane")) {
+    const boxes = $$(".person-node", lane).map((node) => stageBox(node, stageRect, state.camera.scale));
+    if (!boxes.length) continue;
+    return (Math.min(...boxes.map((box) => box.left)) + Math.max(...boxes.map((box) => box.right))) / 2;
+  }
+  return null;
 }
 function fitCamera() { applyFitCamera(false); }
 function fitReadableCamera() { applyFitCamera(true); }
@@ -630,13 +1081,13 @@ function focusCurrentPerson() {
 
 function isCameraInteractiveTarget(target) {
   return Boolean(target.closest(
-    ".person-node,.relationship-hit,.lane-header,.camera-controls,.selection-tray,.canvas-navigator," +
+    ".person-node,.relationship-hit,.lane-header,.camera-controls,.selection-tray,.canvas-navigator,.canvas-banner," +
     "button,input,select,textarea,a,label,dialog,[role=button],[contenteditable]",
   ));
 }
 function isSpacePanControl(target) {
   const control = target.closest(
-    ".camera-controls,.selection-tray,.canvas-navigator,button,input,select,textarea,a,label,dialog," +
+    ".camera-controls,.selection-tray,.canvas-navigator,.canvas-banner,button,input,select,textarea,a,label,dialog," +
     "[contenteditable],[role=button]",
   );
   return Boolean(control && !control.matches(".person-node,.relationship-hit"));
@@ -731,6 +1182,7 @@ function handleCameraWheel(event) {
   setCameraScale(state.camera.scale * multiplier, event.clientX, event.clientY);
 }
 function handleCameraResize() {
+  syncSelectionTrayBounds();
   syncWorkspaceSidebar();
   if (isCompactWorkspace()) clearNavigatorDrag();
   cameraMotion.stop();
@@ -800,6 +1252,15 @@ function updateNavigatorGeometry() {
     const ends = relationshipEnds(relationship);
     const from = points.get(String(ends.sourceId)), to = points.get(String(ends.targetId));
     if (!from || !to) continue;
+    const routed = $('.relationship-path[data-relationship-id="' + CSS.escape(String(relationship.id)) + '"]', $("#relationship-layer"));
+    if (routed?.getAttribute("data-cross-generation") === "true" && routed.getAttribute("d")) {
+      const path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", routed.getAttribute("d"));
+      path.setAttribute("transform", "translate(" + map.x + " " + map.y + ") scale(" + scale + ")");
+      path.setAttribute("vector-effect", "non-scaling-stroke");
+      edgeGroup.append(path);
+      continue;
+    }
     const line = document.createElementNS(SVG_NS, "line");
     line.setAttribute("x1", from.x); line.setAttribute("y1", from.y);
     line.setAttribute("x2", to.x); line.setAttribute("y2", to.y);
@@ -901,12 +1362,12 @@ function renderBoard() {
   lanes.classList.toggle("is-linking", Boolean(state.linkMode && state.linkSource));
   $(".empty-state", $("#generation-board")).hidden = rows.length > 0 || state.workspaceLoadFailed || !state.workspaceLoaded;
   $("#load-error").hidden = !state.workspaceLoadFailed || rows.length > 0;
-  $("#add-first-generation").hidden = isReadonlyDemo() || rows.length > 0;
+  $("#add-first-generation").hidden = rows.length > 0;
   $("#add-generation-above").hidden = rows.length === 0;
   $("#add-generation-below").hidden = rows.length === 0;
   $("#perspective-mode").hidden = people().length === 0;
-  $("#link-mode").hidden = isReadonlyDemo() || people().length === 0;
-  $("#generation-menu-toggle").hidden = isReadonlyDemo() || rows.length === 0;
+  $("#link-mode").hidden = people().length === 0;
+  $("#generation-menu-toggle").hidden = rows.length === 0;
   rows.forEach((generation, generationIndex) => {
     const label = generation.name || "未命名代际";
     const lane = document.createElement("section");
@@ -923,11 +1384,11 @@ function renderBoard() {
     const name = document.createElement("button");
     name.type = "button";
     name.className = "lane-name";
+    name.disabled = !canEditWorkspace();
     const nameText = document.createElement("span");
     nameText.textContent = label;
     name.append(nameText, createIcon("edit"));
-    name.disabled = isReadonlyDemo();
-    name.setAttribute("aria-label", (isReadonlyDemo() ? "代际：" : "重命名代际：") + label);
+    name.setAttribute("aria-label", "重命名代际：" + label);
     name.addEventListener("click", () => openGenerationDialog("rename", generation.id));
     const lanePeople = peopleInGeneration(generation.id);
     const count = document.createElement("span");
@@ -936,13 +1397,13 @@ function renderBoard() {
     const add = document.createElement("button");
     add.type = "button";
     add.className = "lane-add";
-    add.disabled = isReadonlyDemo();
+    add.disabled = !canEditWorkspace();
     add.append(createIcon("user-plus"), document.createTextNode("添加人物"));
     add.addEventListener("click", () => openPersonDialog(generation.id));
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "lane-remove";
-    remove.disabled = isReadonlyDemo();
+    remove.disabled = !canEditWorkspace();
     remove.hidden = lanePeople.length > 0;
     remove.setAttribute("aria-label", "删除空代际：" + label);
     remove.dataset.tooltip = "删除这个空代际";
@@ -960,7 +1421,7 @@ function renderBoard() {
       const empty = document.createElement("button");
       empty.type = "button";
       empty.className = "lane-empty";
-      empty.disabled = isReadonlyDemo();
+      empty.disabled = !canEditWorkspace();
       const hint = document.createElement("small");
       hint.textContent = "这一代还没有人物";
       empty.append(createIcon("user-plus"), document.createTextNode("添加人物"), hint);
@@ -977,6 +1438,8 @@ function createPersonNode(person) {
   node.className = "person-node";
   node.dataset.personId = person.id;
   node.dataset.gender = person.gender || "unknown";
+  // Long transliterated names wrap to two lines instead of losing their distinguishing ending.
+  if (Array.from(person.name || "").length > 6) node.classList.add("has-long-name");
   node.tabIndex = 0;
   node.setAttribute("role", "button");
   const genderText = person.gender === "male" ? "男" : person.gender === "female" ? "女" : "性别未填写";
@@ -1052,7 +1515,7 @@ function createPersonNode(person) {
   return node;
 }
 function openGenerationDialog(intent, generationId = null) {
-  if (preventDemoEdit()) return;
+  if (!canEditWorkspace()) return;
   if (state.historyBusy || state.mutations) return;
   const generation = generationId ? generations().find((item) => String(item.id) === String(generationId)) : null;
   state.generationIntent = { intent, generationId };
@@ -1079,7 +1542,6 @@ function closeGenerationDialog() {
 }
 
 async function saveGeneration(event) {
-  if (preventDemoEdit(event)) return;
   event.preventDefault();
   const current = state.generationIntent;
   if (!current) return;
@@ -1100,9 +1562,9 @@ async function saveGeneration(event) {
       if (name) body.name = name;
       data = await api("/api/generations", { method: "POST", body: JSON.stringify(body) });
     }
-    state.workspace = workspaceFrom(data);
+    replaceWorkspace(data);
     closeGenerationDialog();
-    render();
+    render({ animate: true });
     if (current.intent === "rename") {
       showToast("代际名称已更新", "success");
     } else {
@@ -1116,7 +1578,6 @@ async function saveGeneration(event) {
 }
 
 async function deleteGeneration(id) {
-  if (preventDemoEdit()) return;
   if (people().some((person) => String(person.generation_id) === String(id))) {
     showToast("只能删除没有人物的代际", "error"); return;
   }
@@ -1125,8 +1586,8 @@ async function deleteGeneration(id) {
     title: "删除这个空代际？", confirmLabel: "删除代际", tone: "danger",
   })) return;
   try {
-    state.workspace = workspaceFrom(await api("/api/generations/" + encodeURIComponent(id), { method: "DELETE" }));
-    render();
+    replaceWorkspace(await api("/api/generations/" + encodeURIComponent(id), { method: "DELETE" }));
+    render({ animate: true });
     showToast("代际已删除", "success", undoAction());
   } catch (error) { showToast(error.message, "error"); }
 }
@@ -1146,7 +1607,6 @@ function personFormValue() {
   });
 }
 function personHasChanges() {
-  if (isReadonlyDemo()) return false;
   return $("#person-dialog").open && personFormValue() !== personEditor.baseline;
 }
 function setPersonStatus(message, kind = "") {
@@ -1194,6 +1654,26 @@ function renderProfileAvatar(target, person, photoPath = person?.photo_path || p
     target.textContent = Array.from(person?.name || "新")[0];
   }
 }
+function personMoveImpact(personId, generationId) {
+  const rows = generations();
+  const destination = rows.findIndex((row) => String(row.id) === String(generationId));
+  if (destination < 0) return [];
+  const level = (id) => String(id) === String(personId) ? destination
+    : rows.findIndex((row) => String(row.id) === String(personById(id)?.generation_id));
+  return relationships().filter((relationship) => {
+    const { sourceId, targetId } = relationshipEnds(relationship);
+    if (![sourceId, targetId].some((id) => String(id) === String(personId))) return false;
+    return experimentalCrossGeneration() ? level(sourceId) >= level(targetId)
+      : Math.abs(level(sourceId) - level(targetId)) !== 1;
+  });
+}
+function personMoveNotice(personId, generationId) {
+  const affected = personMoveImpact(personId, generationId).length;
+  if (!affected) return "";
+  return experimentalCrossGeneration()
+    ? "无法移动：将使 " + affected + " 条亲子关系的父母与子女同排或倒置；此次修改会被拒绝，现有关系保留。"
+    : "保存后，将取消 " + affected + " 条不再相邻的关系。";
+}
 function updatePersonPreview() {
   const person = personById(state.editingPersonId);
   const name = $("#person-name").value.trim();
@@ -1211,21 +1691,15 @@ function updatePersonPreview() {
   $("#person-profile-context").textContent = [personGenerationName($("#person-generation").value), genderText,
     person ? relationCount + " 条关系" : "新人物"].filter(Boolean).join(" · ");
   const warning = $("#person-generation-warning");
-  const rows = generations();
-  const destination = rows.findIndex((g) => String(g.id) === $("#person-generation").value);
-  const affected = person ? relationships().filter((item) => {
-    const { sourceId, targetId } = relationshipEnds(item);
-    if (![sourceId, targetId].some((id) => String(id) === String(person.id))) return false;
-    const otherId = String(sourceId) === String(person.id) ? targetId : sourceId;
-    const other = personById(otherId);
-    const otherIndex = rows.findIndex((g) => String(g.id) === String(other?.generation_id));
-    return Math.abs(destination - otherIndex) !== 1;
-  }).length : 0;
-  warning.hidden = !affected;
-  warning.textContent = affected ? "保存后，将取消 " + affected + " 条不再相邻的关系。" : "";
+  const destination = $("#person-generation").value;
+  const moved = person && String(person.generation_id) !== String(destination);
+  const notice = person ? personMoveNotice(person.id, destination) : "";
+  const preserving = experimentalCrossGeneration() && moved && relationCount && !notice;
+  warning.hidden = !notice && !preserving;
+  warning.dataset.kind = notice && experimentalCrossGeneration() ? "error" : preserving ? "info" : "";
+  warning.textContent = notice || (preserving ? "保存后保留现有亲子关系；跨越行数不改变父母与子女的角色。" : "");
 }
 function personInputChanged(event) {
-  if (preventDemoEdit(event)) return;
   // The relative picker acts immediately and is not part of the person draft.
   if (event?.target?.id === "person-relative-add") return;
   updatePersonPreview();
@@ -1251,7 +1725,7 @@ function animatePersonInspector(entering) {
   return motion;
 }
 async function openPersonDialog(generationId, personId = null) {
-  if (isReadonlyDemo() && !personById(personId)) return;
+  if (!personId && !canEditWorkspace()) return;
   if (state.historyBusy || state.mutations) return;
   if (personEditor.saving) return;
   if ($("#person-dialog").open && String(state.editingPersonId) === String(personId) &&
@@ -1286,7 +1760,7 @@ async function openPersonDialog(generationId, personId = null) {
   personEditor.baseline = personFormValue();
   updatePersonPreview();
   renderPersonRelatives();
-  setPersonStatus(isReadonlyDemo() ? "公开只读演示 · 下载完整版后可编辑" : person ? "已保存" : "填写资料后保存");
+  setPersonStatus(person ? "已保存" : "填写资料后保存");
   $(".inspector-content").scrollTop = 0;
   if (!wasOpen) {
     $("#person-dialog").show();
@@ -1295,8 +1769,29 @@ async function openPersonDialog(generationId, personId = null) {
     handleCameraResize();
   }
   $$(".person-node").forEach((node) => node.classList.toggle("is-inspected", String(node.dataset.personId) === String(personId)));
-  $("#person-name").focus({ preventScroll: true });
+  renderWriteAccess();
+  // A new person starts at the name; an existing profile opens for reading without lighting up a field.
+  if (!person && canEditWorkspace()) $("#person-name").focus({ preventScroll: true });
+  else $("#person-form").focus({ preventScroll: true });
+  // Only where frames render: wait for the inspector to land and for resize-driven recentring, which would cancel the glide.
+  if (person && typeof requestAnimationFrame === "function") setTimeout(() => revealInspectedPerson(person.id), wasOpen ? 40 : 260);
   renderWorkspaceSaveState();
+}
+// Opening a profile keeps the chosen card in view beside the inspector (above the sheet on phones).
+function revealInspectedPerson(personId) {
+  const node = $('.person-node[data-person-id="' + CSS.escape(String(personId)) + '"]');
+  if (!node || !$("#person-dialog").open || String(state.editingPersonId) !== String(personId)) return;
+  const viewport = getCameraViewport();
+  const board = $("#generation-board").getBoundingClientRect();
+  const rect = node.getBoundingClientRect();
+  let bottom = viewport.top + viewport.height;
+  if (matchMedia("(max-width: 719px)").matches) bottom = Math.min(bottom, $("#person-dialog").getBoundingClientRect().top - board.top);
+  const margin = 24, left = rect.left - board.left, top = rect.top - board.top;
+  const right = viewport.left + viewport.width;
+  const dx = left + rect.width > right - margin ? right - margin - left - rect.width : left < viewport.left + margin ? viewport.left + margin - left : 0;
+  const dy = top + rect.height > bottom - margin ? Math.max(bottom - margin - top - rect.height, viewport.top + margin - top)
+    : top < viewport.top + margin ? viewport.top + margin - top : 0;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) moveCameraTo({ x: state.camera.x + dx, y: state.camera.y + dy, scale: state.camera.scale });
 }
 async function closePersonDialog(force = false) {
   const dialog = $("#person-dialog");
@@ -1331,9 +1826,9 @@ function setPersonSaving(saving) {
   $$("input, select, textarea, button", $("#person-form")).forEach((control) => control.disabled = saving);
   $(".photo-picker").setAttribute("aria-disabled", String(saving));
   $("#person-save").textContent = saving ? "保存中…" : state.editingPersonId ? "保存修改" : "创建人物";
+  renderWriteAccess();
 }
 async function savePerson(event) {
-  if (preventDemoEdit(event)) return;
   event.preventDefault();
   if (personEditor.saving) return;
   const payload = {
@@ -1357,7 +1852,7 @@ async function savePerson(event) {
     const data = savedId
       ? await api("/api/people/" + encodeURIComponent(savedId), { method: "PATCH", body: JSON.stringify(payload) })
       : await api("/api/people", { method: "POST", body: JSON.stringify(payload) });
-    state.workspace = workspaceFrom(data);
+    replaceWorkspace(data);
     savedId = savedId || data.person?.id || data.id || people().find((person) => !previousIds.has(String(person.id)))?.id;
     if (!savedId) throw new Error("人物已保存，请重新打开档案确认");
     savedPerson = true;
@@ -1365,7 +1860,7 @@ async function savePerson(event) {
     state.editingPersonId = savedId;
     state.editingGenerationId = payload.generation_id;
     if (photo) {
-      state.workspace = workspaceFrom(await api("/api/photos", {
+      replaceWorkspace(await api("/api/photos", {
         method: "POST",
         body: JSON.stringify({ person_id: savedId, filename: photo.name, data_url: await readFileAsDataUrl(photo) }),
       }));
@@ -1375,7 +1870,7 @@ async function savePerson(event) {
     releasePersonPhotoPreview();
     personEditor.baseline = personFormValue();
     const created = !previousIds.has(String(savedId));
-    render();
+    render({ animate: true });
     updatePersonPreview();
     renderPersonRelatives();
     $("#person-delete").hidden = false;
@@ -1395,7 +1890,6 @@ async function savePerson(event) {
 }
 
 async function deletePerson() {
-  if (preventDemoEdit()) return;
   if (personEditor.saving || !state.editingPersonId) return;
   const personId = state.editingPersonId;
   const name = personName(personId);
@@ -1410,9 +1904,9 @@ async function deletePerson() {
   })) return;
   try {
     setPersonSaving(true);
-    state.workspace = workspaceFrom(await api("/api/people/" + encodeURIComponent(personId), { method: "DELETE" }));
+    replaceWorkspace(await api("/api/people/" + encodeURIComponent(personId), { method: "DELETE" }));
     await closePersonDialog(true);
-    render();
+    render({ animate: true });
     showToast("已删除「" + name + "」", "success", undoAction());
   } catch (error) { setPersonStatus("删除失败：" + error.message, "error"); }
   finally { setPersonSaving(false); }
@@ -1467,8 +1961,6 @@ function createRelativeItem(item) {
   const edit = document.createElement("button");
   edit.type = "button";
   edit.className = "icon-button relative-edit";
-  edit.disabled = isReadonlyDemo();
-  edit.hidden = isReadonlyDemo();
   edit.dataset.relationshipId = item.relationship.id;
   edit.dataset.tooltip = "编辑关系";
   edit.dataset.tooltipAlign = "end";
@@ -1511,36 +2003,32 @@ function renderPersonRelatives() {
     list.append(group);
   });
   if (!relatives.length) note("还没有记录父母或子女。");
-  if (isReadonlyDemo()) {
-    field.hidden = true;
-    return;
-  }
   const rows = generations();
   const index = rows.findIndex((row) => String(row.id) === String(person.generation_id));
-  const related = new Set(relatives.map((item) => String(item.person.id)));
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.textContent = "添加父母或子女…";
   select.append(placeholder);
   let candidates = 0;
-  [[index - 1, "父母"], [index + 1, "子女"]].forEach(([rowIndex, role]) => {
-    const row = index < 0 ? null : rows[rowIndex];
-    if (!row) return;
-    const options = peopleInGeneration(row.id).filter((other) => other.gender && !related.has(String(other.id)));
-    if (!options.length) return;
+  [["父母", -1], ["子女", 1]].forEach(([role, direction]) => {
     const group = document.createElement("optgroup");
-    group.label = (row.name || "未命名代际") + " · 设为" + role;
-    options.forEach((other) => {
-      const option = document.createElement("option");
-      option.value = other.id;
-      option.textContent = other.name + "（" + (other.gender === "male" ? "男" : "女") + "）";
-      group.append(option);
+    group.label = "设为" + role;
+    rows.forEach((row, rowIndex) => {
+      if (index < 0 || Math.sign(rowIndex - index) !== direction) return;
+      const options = peopleInGeneration(row.id).filter((other) => canLinkPeople(person.id, other.id));
+      options.forEach((other) => {
+        const option = document.createElement("option");
+        option.value = other.id;
+        option.textContent = other.name + "（" + (other.gender === "male" ? "男" : "女") +
+          " · " + (row.name || "未命名代际") + "）";
+        group.append(option);
+      });
+      candidates += options.length;
     });
-    select.append(group);
-    candidates += options.length;
+    if (group.children.length) select.append(group);
   });
   field.hidden = !candidates || !person.gender;
-  select.disabled = false;
+  select.disabled = !canEditWorkspace();
   $("#person-relative-confirm").disabled = true;
 }
 async function openRelativeProfile(personId) {
@@ -1562,7 +2050,6 @@ async function editRelativeRelationship(relationshipId) {
   }, { once: true });
 }
 async function addRelativeFromInspector() {
-  if (preventDemoEdit()) return;
   const select = $("#person-relative-add");
   const otherId = select.value;
   if (!otherId || !state.editingPersonId) return;
@@ -1572,7 +2059,7 @@ async function addRelativeFromInspector() {
   renderPersonRelatives();
 }
 function acceptDroppedPhoto(event) {
-  if (preventDemoEdit(event)) return;
+  if (!canEditWorkspace()) return;
   const files = [...(event.dataTransfer?.files || [])];
   $(".photo-picker").classList.remove("is-drop-target");
   if (!files.length) return;
@@ -1600,10 +2087,11 @@ function activatePerson(personId) {
 }
 
 async function selectLinkPerson(personId) {
-  if (preventDemoEdit()) return;
+  if (!canEditWorkspace()) return;
   if (!state.linkSource) {
     state.linkSource = personId;
-    showToast("已选择起点「" + personName(personId) + "」，请点选相邻代的人物");
+    showToast("已选择起点「" + personName(personId) + "」，请点选" +
+      (experimentalCrossGeneration() ? "任意上行或下行的人物" : "相邻代的人物"));
     render();
     return;
   }
@@ -1626,6 +2114,7 @@ function exitLinkMode(shouldRender = true) {
 }
 
 async function enterSelectMode() {
+  invalidateExperimentalTasks();
   if ($("#person-dialog").open && !await closePersonDialog()) return;
   cancelActivePersonDrag();
   invalidateRelationshipTasks();
@@ -1640,7 +2129,15 @@ async function enterSelectMode() {
 }
 
 function renderModeControls() {
+  const experimental = experimentalCrossGeneration();
+  $("#cross-generation-status").hidden = !experimental;
+  $("#help-cross-generation").hidden = !experimental;
+  $("#help-link-target").textContent = experimental ? " + 拖到任意上行或下行人物" : " + 拖到相邻代";
+  $("#link-mode").dataset.tooltip = experimental ? "跨代连线 · 实验 · L" : "连线 · L";
   const selecting = !state.linkMode && !state.perspective;
+  const selectLabel = canEditWorkspace() ? "编辑" : "查看";
+  $("#select-mode-label").textContent = selectLabel;
+  $("#select-mode").dataset.tooltip = selectLabel + " · V";
   $("#select-mode").setAttribute("aria-pressed", String(selecting));
   $("#link-mode").setAttribute("aria-pressed", String(state.linkMode));
   $("#perspective-mode").setAttribute("aria-pressed", String(state.perspective));
@@ -1648,10 +2145,10 @@ function renderModeControls() {
   $(".canvas-hint").textContent = state.perspective
     ? "点选人物填入 A / B · 按住空格拖动画布 · Esc 退出关系"
     : state.linkMode
-      ? (state.linkSource ? "已选起点「" + personName(state.linkSource) + "」· 点选相邻代的人物完成连线 · Esc 取消"
-        : "连线模式 · 依次点选两人或拖出连线 · Esc 退出")
-      : isReadonlyDemo() ? "公开只读演示 · 点选查看资料 · 按住空格平移"
-        : "点选查看资料 · 拖动人物排序或换代 · 按住空格平移";
+      ? (state.linkSource ? "已选起点「" + personName(state.linkSource) + "」· 点选" +
+          (experimental ? "任意上行或下行人物" : "相邻代的人物") + "完成连线 · Esc 取消"
+        : (experimental ? "跨代连线 · 实验" : "连线模式") + " · 依次点选两人或拖出连线 · Esc 退出")
+      : !canEditWorkspace() ? "仅可查看 · 点选人物查看资料 · 按住空格平移" : "点选查看资料 · 拖动人物排序或换代 · 按住空格平移";
   $("#camera-focus").setAttribute("aria-disabled", String(!state.focusedPersonId));
 }
 
@@ -1663,9 +2160,9 @@ function closeGenerationMenu(restoreFocus = false) {
 }
 
 function toggleGenerationMenu(event) {
-  if (preventDemoEdit(event)) return;
   event.stopPropagation();
   closeWorkspaceHelp();
+  closeLabsPopover();
   const menu = $("#generation-menu");
   const shouldOpen = menu.hidden;
   menu.hidden = !shouldOpen;
@@ -1770,9 +2267,10 @@ function handleSearchKeydown(event) {
       ? matches.length - 1
       : state.searchActiveIndex - 1;
     renderSearchResults();
-  } else if (event.key === "Enter" && state.searchActiveIndex >= 0 && matches[state.searchActiveIndex]) {
+  } else if (event.key === "Enter" && matches.length) {
+    // Enter goes to the highlighted match, or to the first one when nothing is highlighted yet.
     event.preventDefault();
-    selectSearchResult(matches[state.searchActiveIndex].id);
+    selectSearchResult(matches[Math.max(0, state.searchActiveIndex)].id);
   } else if (event.key === "Escape") {
     event.preventDefault();
     closeSearchResults();
@@ -1783,6 +2281,7 @@ function invalidateCopyRequest() {
   state.copyRequestId += 1;
   state.copyInFlight = false;
   state.relationshipCopyError = null;
+  state.relationshipCopiedText = null;
 }
 
 function isCopyRequestCurrent(token, a, b) {
@@ -1799,6 +2298,7 @@ function invalidatePathRequest() {
   state.relationshipCopyText = null;
   state.relationshipPathError = null;
   state.relationshipPath = null;
+  state.relationshipEvidenceOpen = false;
 }
 
 function invalidateRelationshipTasks() {
@@ -1806,8 +2306,9 @@ function invalidateRelationshipTasks() {
   invalidatePathRequest();
 }
 
-function isPathRequestCurrent(token, a, b) {
-  return token === state.pathRequestId &&
+function isPathRequestCurrent(token, a, b, workspace, epoch = state.configEpoch || 0) {
+  return workspace === state.workspace && epoch === (state.configEpoch || 0) && !state.configBusy && !state.configError &&
+    token === state.pathRequestId &&
     state.relationshipPathLoading &&
     state.perspective &&
     String(state.selectionA) === String(a) &&
@@ -1815,7 +2316,8 @@ function isPathRequestCurrent(token, a, b) {
 }
 
 async function toggleLinkMode() {
-  if (preventDemoEdit()) return;
+  if (!canEditWorkspace()) return;
+  invalidateExperimentalTasks();
   if ($("#person-dialog").open && !await closePersonDialog()) return;
   cancelActivePersonDrag();
   if (state.linkMode) {
@@ -1853,9 +2355,9 @@ function beginPersonPointer(event) {
     startX: event.clientX, startY: event.clientY, initialX, initialY,
     samples: [{ x: event.clientX, y: event.clientY, time: event.timeStamp }],
     offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top,
-    dragging: false, selectOnly: isReadonlyDemo() || state.perspective || ($("#person-dialog").open && String(state.editingPersonId) === node.dataset.personId),
+    dragging: false, selectOnly: !canEditWorkspace() || state.perspective || ($("#person-dialog").open && String(state.editingPersonId) === node.dataset.personId),
     inspectorLocked: $("#person-dialog").open && String(state.editingPersonId) === node.dataset.personId,
-    relationship: !isReadonlyDemo() && !state.perspective && (state.linkMode || event.shiftKey),
+    relationship: canEditWorkspace() && !state.perspective && (state.linkMode || event.shiftKey),
     targetLane: null, targetNode: null, reorderIndex: null, reorderGenerationId: null,
   };
   node.addEventListener("pointermove", movePersonPointer);
@@ -1869,7 +2371,7 @@ function movePersonPointer(event) {
   const dx = event.clientX - drag.startX, dy = event.clientY - drag.startY;
   if (!drag.dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
   if (drag.selectOnly) {
-    if (!isReadonlyDemo() && !drag.dragging && drag.inspectorLocked) showToast("请在档案中修改所属代际，或关闭档案后拖动");
+    if (!drag.dragging && drag.inspectorLocked) showToast("请在档案中修改所属代际，或关闭档案后拖动");
     drag.dragging = true;
     drag.node.classList.remove("is-pressed");
     return;
@@ -1903,6 +2405,13 @@ function movePersonPointer(event) {
         event.clientY >= rect.top && event.clientY <= rect.bottom;
     }) || null;
     drag.targetLane?.classList.add("is-drop-target");
+    if (drag.targetLane) {
+      const destinationId = drag.targetLane.dataset.generationId;
+      const notice = personMoveNotice(drag.personId, destinationId);
+      drag.targetLane.classList.toggle("is-drop-conflict", Boolean(notice && experimentalCrossGeneration()));
+      $(".canvas-hint").textContent = notice || "移到「" + personGenerationName(destinationId) + "」" +
+        (experimentalCrossGeneration() ? " · 保留现有亲子关系" : " · 松开完成移动");
+    } else renderModeControls();
     if (drag.targetLane) updateReorderPreview(drag, drag.targetLane, event.clientX);
   }
 }
@@ -2049,23 +2558,36 @@ function clearDropTargets() {
     state.drag.reorderIndex = null;
     state.drag.reorderGenerationId = null;
   }
-  $$(".is-drop-target, .is-link-target").forEach((element) =>
-    element.classList.remove("is-drop-target", "is-link-target")
+  $$(".is-drop-target, .is-drop-conflict, .is-link-target").forEach((element) =>
+    element.classList.remove("is-drop-target", "is-drop-conflict", "is-link-target")
   );
 }
-// Adjacent-generation people with a gender and no existing edge can receive a new link.
-function canLinkPeople(firstId, secondId) {
+// All link entry points share the same validation and explain rejected targets.
+function relationshipLinkError(firstId, secondId) {
+  if (!canEditWorkspace()) return "当前家谱只读，请先启用实验性功能";
+  if (!secondId) return experimentalCrossGeneration()
+    ? "按住 Shift 拖到上行或下行的人物上才能建立关系"
+    : "按住 Shift 拖到相邻代的人物上才能建立关系";
   const first = personById(firstId), second = personById(secondId);
-  if (!first?.gender || !second?.gender || String(first.id) === String(second.id)) return false;
+  if (!first || !second) return "人物不存在，请刷新后重试";
+  if (String(first.id) === String(second.id)) return "连线终点不能与起点相同";
+  if (!first.gender || !second.gender) return "双方都必须填写性别后才能建立标准亲子关系";
   const rows = generations();
   const firstLevel = rows.findIndex((row) => String(row.id) === String(first.generation_id));
   const secondLevel = rows.findIndex((row) => String(row.id) === String(second.generation_id));
-  if (firstLevel < 0 || secondLevel < 0 || Math.abs(firstLevel - secondLevel) !== 1) return false;
-  return !relationships().some((item) => {
+  if (firstLevel < 0 || secondLevel < 0) return "人物所属代际不存在，请刷新后重试";
+  if (firstLevel === secondLevel) return "同一排的人物不能建立亲子关系";
+  if (!experimentalCrossGeneration() && Math.abs(firstLevel - secondLevel) !== 1)
+    return "亲子关系只能连接相邻的两代";
+  if (relationships().some((item) => {
     const ends = relationshipEnds(item);
-    return [String(ends.sourceId), String(ends.targetId)].sort().join("|") ===
-      [String(first.id), String(second.id)].sort().join("|");
-  });
+    return (String(ends.sourceId) === String(first.id) && String(ends.targetId) === String(second.id)) ||
+      (String(ends.sourceId) === String(second.id) && String(ends.targetId) === String(first.id));
+  })) return "两位人物已经有亲子关系";
+  return "";
+}
+function canLinkPeople(firstId, secondId) {
+  return !relationshipLinkError(firstId, secondId);
 }
 function markLinkCandidates(sourceId) {
   $("#generation-lanes").classList.add("is-linking");
@@ -2105,11 +2627,11 @@ function clearDragVisuals(drag, keepPosition = false) {
   else drag.node.style.transform = "";
   drag.node.style.opacity = "";
   state.drag = null;
+  renderModeControls();
   requestDraw();
   if (!keepPosition) requestNavigatorUpdate(true);
 }
 async function reorderPersonInGeneration(personId, generationId, insertionIndex, velocities = {}) {
-  if (preventDemoEdit()) return;
   const currentIds = peopleInGeneration(generationId).map((person) => String(person.id));
   const withoutDragged = currentIds.filter((id) => id !== String(personId));
   const nextIds = [...withoutDragged];
@@ -2119,7 +2641,7 @@ async function reorderPersonInGeneration(personId, generationId, insertionIndex,
     return;
   }
   try {
-    state.workspace = workspaceFrom(await api(
+    replaceWorkspace(await api(
       "/api/generations/" + encodeURIComponent(generationId) + "/people-order",
       { method: "PATCH", body: JSON.stringify({ person_ids: nextIds }) },
     ));
@@ -2136,13 +2658,12 @@ async function reorderPersonInGeneration(personId, generationId, insertionIndex,
 }
 
 async function movePersonToGeneration(personId, generationId, velocities = {}) {
-  if (preventDemoEdit()) return;
   const person = personById(personId);
   if (!person || String(person.generation_id) === String(generationId)) {
     showToast("人物已在这一代"); return;
   }
   try {
-    state.workspace = workspaceFrom(await api("/api/people/" + encodeURIComponent(personId), {
+    replaceWorkspace(await api("/api/people/" + encodeURIComponent(personId), {
       method: "PATCH", body: JSON.stringify({ generation_id: generationId }),
     }));
     render({ animate: true, velocities });
@@ -2150,26 +2671,20 @@ async function movePersonToGeneration(personId, generationId, velocities = {}) {
   } catch (error) { showToast(error.message, "error"); }
 }
 async function createDraggedRelationship(firstId, secondId) {
-  if (preventDemoEdit()) return;
-  if (!secondId) { showToast("按住 Shift 拖到相邻代的人物上才能建立关系", "error"); return; }
+  const error = relationshipLinkError(firstId, secondId);
+  if (error) { showToast(error, "error"); return; }
   const first = personById(firstId), second = personById(secondId);
-  if (!first?.gender || !second?.gender) {
-    showToast("双方都必须填写性别后才能建立标准亲子关系", "error"); return;
-  }
   const rows = generations();
   const firstLevel = rows.findIndex((row) => String(row.id) === String(first.generation_id));
   const secondLevel = rows.findIndex((row) => String(row.id) === String(second.generation_id));
-  if (firstLevel === secondLevel) { showToast("同一代的人物不能建立亲子关系", "error"); return; }
-  if (firstLevel < 0 || secondLevel < 0 || Math.abs(firstLevel - secondLevel) !== 1) {
-    showToast("亲子关系只能连接相邻的两代", "error"); return;
-  }
   const sourceId = firstLevel < secondLevel ? first.id : second.id;
   const targetId = firstLevel < secondLevel ? second.id : first.id;
   try {
     const data = await api("/api/relationships", {
       method: "POST", body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
     });
-    state.workspace = workspaceFrom(data);
+    replaceWorkspace(data);
+    state.freshRelationship = data.relationship?.id ? { id: String(data.relationship.id), at: Date.now() } : null;
     render();
     const label = data.relationship?.parent_label;
     showToast(label ? "已记录：「" + personName(sourceId) + "」是「" + personName(targetId) + "」的" + label
@@ -2253,6 +2768,47 @@ function assignRelationshipChannels(edges) {
       edge.channelY = trackCount === 1
         ? top + distance / 2
         : top + inset + usable * ((edge.track + 0.5) / trackCount);
+    });
+  });
+}
+
+function assignCrossGenerationChannels(edges, stageRect, scale, rightBoundary) {
+  const crossEdges = edges.filter((edge) => edge.crossGeneration);
+  if (!crossEdges.length) return;
+  const rows = generations();
+  const rowBoxes = new Map();
+  for (const lane of $$(".generation-lane")) {
+    const obstacles = [...$$(".person-node", lane), $(".lane-header", lane)].filter(Boolean)
+      .map((element) => stageBox(element, stageRect, scale));
+    if (!obstacles.length) continue;
+    rowBoxes.set(String(lane.dataset.generationId), {
+      top: Math.min(...obstacles.map((box) => box.top)),
+      bottom: Math.max(...obstacles.map((box) => box.bottom)),
+    });
+  }
+  const levels = new Map(rows.map((row, index) => [String(row.id), index]));
+  const gapEnds = new Map();
+  const addGapEnd = (index, edge, key) => {
+    if (!gapEnds.has(index)) gapEnds.set(index, []);
+    gapEnds.get(index).push({ edge, key });
+  };
+  crossEdges.sort((a, b) => String(a.relationship.id).localeCompare(String(b.relationship.id)));
+  crossEdges.forEach((edge, index) => {
+    edge.outerX = rightBoundary + 24 + index * 24;
+    const sourceLevel = levels.get(String(personById(edge.sourceId)?.generation_id));
+    const targetLevel = levels.get(String(personById(edge.targetId)?.generation_id));
+    addGapEnd(sourceLevel, edge, "exitY");
+    addGapEnd(targetLevel - 1, edge, "entryY");
+  });
+  gapEnds.forEach((ends, index) => {
+    const upper = rowBoxes.get(String(rows[index]?.id));
+    const lower = rowBoxes.get(String(rows[index + 1]?.id));
+    // Every horizontal run uses the empty gap outside both cards and row headings.
+    const top = upper?.bottom ?? Math.max(...ends.map(({ edge }) => edge.y1));
+    const bottom = lower?.top ?? Math.min(...ends.map(({ edge }) => edge.y2));
+    const inset = Math.min(16, Math.max(0, bottom - top) / 4);
+    ends.forEach(({ edge, key }, position) => {
+      edge[key] = top + inset + Math.max(0, bottom - top - inset * 2) * (position + 1) / (ends.length + 1);
     });
   });
 }
@@ -2427,6 +2983,23 @@ function clearActiveRelationshipPerson(personId) {
 // Orthogonal routing with softened corners; the channel keeps parallel lines apart.
 function relationshipPathData(edge) {
   const { x1, y1, x2, y2, channelY } = edge;
+  if (edge.crossGeneration) {
+    const points = [[x1, y1], [x1, edge.exitY], [edge.outerX, edge.exitY],
+      [edge.outerX, edge.entryY], [x2, edge.entryY], [x2, y2]];
+    let path = "M " + x1 + " " + y1;
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const previous = points[index - 1], point = points[index], next = points[index + 1];
+      const before = Math.hypot(point[0] - previous[0], point[1] - previous[1]);
+      const after = Math.hypot(next[0] - point[0], next[1] - point[1]);
+      const radius = Math.min(10, before / 2, after / 2);
+      const entry = [point[0] - Math.sign(point[0] - previous[0]) * radius,
+        point[1] - Math.sign(point[1] - previous[1]) * radius];
+      const exit = [point[0] + Math.sign(next[0] - point[0]) * radius,
+        point[1] + Math.sign(next[1] - point[1]) * radius];
+      path += " L " + entry.join(" ") + " Q " + point.join(" ") + " " + exit.join(" ");
+    }
+    return path + " L " + x2 + " " + y2;
+  }
   const direction = Math.sign(x2 - x1);
   const radius = Math.max(0, Math.min(10, Math.abs(x2 - x1) / 2, channelY - y1, y2 - channelY));
   if (!direction || radius < 1) return "M " + x1 + " " + y1 + " V " + channelY + " H " + x2 + " V " + y2;
@@ -2446,14 +3019,9 @@ function drawRelationships() {
     : null;
   svg.innerHTML = "";
   const stageRect = stage.getBoundingClientRect();
-  const width = Math.max(
-    stage.scrollWidth, stage.offsetWidth, stage.clientWidth,
-    lanes.scrollWidth, lanes.offsetWidth, lanes.clientWidth,
-  );
-  const height = Math.max(
-    stage.scrollHeight, stage.offsetHeight, stage.clientHeight,
-    lanes.scrollHeight, lanes.offsetHeight, lanes.clientHeight,
-  );
+  const bounds = cameraContentBounds();
+  const width = Math.max(stage.offsetWidth, stage.clientWidth, bounds.width);
+  const height = Math.max(stage.offsetHeight, stage.clientHeight, bounds.height);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
   svg.setAttribute("viewBox", "0 0 " + width + " " + height);
@@ -2466,6 +3034,7 @@ function drawRelationships() {
     if (!boxCache.has(key)) boxCache.set(key, stageBox(element, stageRect, scale));
     return boxCache.get(key);
   };
+  const crossIds = new Set(crossGenerationRelationships().map((relationship) => String(relationship.id)));
   const edges = relationships().map((relationship) => {
     const ends = relationshipEnds(relationship);
     const source = $('.person-node[data-person-id="' + CSS.escape(String(ends.sourceId)) + '"]');
@@ -2475,6 +3044,7 @@ function drawRelationships() {
     const targetBox = boxFor(ends.targetId, target);
     return {
       relationship,
+      crossGeneration: crossIds.has(String(relationship.id)),
       sourceId: ends.sourceId,
       targetId: ends.targetId,
       sourceBox,
@@ -2487,7 +3057,8 @@ function drawRelationships() {
   }).filter(Boolean);
   spreadRelationshipPorts(edges, "source");
   spreadRelationshipPorts(edges, "target");
-  assignRelationshipChannels(edges);
+  assignRelationshipChannels(edges.filter((edge) => !edge.crossGeneration));
+  assignCrossGenerationChannels(edges, stageRect, scale, lanes.scrollWidth);
   edges.forEach((edge) => {
     const relationship = edge.relationship;
     const kind = relationship.kind || relationship.type || "standard";
@@ -2499,6 +3070,7 @@ function drawRelationships() {
       element.setAttribute("data-relationship-id", relationship.id);
       element.setAttribute("data-source-id", edge.sourceId);
       element.setAttribute("data-target-id", edge.targetId);
+      element.setAttribute("data-cross-generation", String(edge.crossGeneration));
     };
     const casing = document.createElementNS(SVG_NS, "path");
     casing.setAttribute("class", "relationship-casing");
@@ -2524,12 +3096,12 @@ function drawRelationships() {
     const relationLabel = kind === "special"
       ? [relationship.parent_label, relationship.child_label].filter(Boolean).join(" / ") || "特殊"
       : RELATIONSHIP_KIND_LABELS[kindKey] || "亲子";
-    const accessibleLabel = (isReadonlyDemo() ? "查看关系：" : "编辑：") + personName(edge.sourceId) + " 到 " +
-      personName(edge.targetId) + " 的" + relationLabel + "关系";
+    const accessibleLabel = "编辑：" + personName(edge.sourceId) + " 到 " +
+      personName(edge.targetId) + " 的" + relationLabel + "关系" + (edge.crossGeneration ? "，跨代连线，实验" : "");
     hit.setAttribute("aria-label", accessibleLabel);
     const title = document.createElementNS(SVG_NS, "title");
     title.textContent = personName(edge.sourceId) + " → " + personName(edge.targetId) +
-      " · " + relationLabel;
+      " · " + relationLabel + (edge.crossGeneration ? " · 跨代连线 · 实验" : "");
     hit.append(title);
     hit.addEventListener("pointerenter", () => setActiveRelationship(relationship.id));
     hit.addEventListener("pointerleave", () => {
@@ -2547,6 +3119,15 @@ function drawRelationships() {
         event.preventDefault(); openRelationshipDialog(relationship.id);
       }
     });
+    // A just-created line draws itself; redraws during that moment continue the same stroke.
+    const fresh = state.freshRelationship;
+    const freshAge = fresh && fresh.id === String(relationship.id) ? Date.now() - fresh.at : Infinity;
+    if (freshAge < 900) {
+      path.setAttribute("pathLength", "1");
+      path.classList.add("is-fresh");
+      origin.classList.add("is-fresh");
+      path.style.animationDelay = origin.style.animationDelay = -freshAge + "ms";
+    }
     svg.append(casing, path, origin, hit);
   });
   applyRelationshipFocus();
@@ -2555,6 +3136,7 @@ function drawRelationships() {
       CSS.escape(String(focusedRelationshipId)) + '"]', svg);
     replacement?.focus({ preventScroll: true });
   }
+  requestNavigatorUpdate(true);
 }
 function relationshipKindKey(relationship, sourceId, targetId) {
   if ((relationship.kind || relationship.type) === "special") return "special";
@@ -2607,7 +3189,7 @@ function renderRelationshipContext(item) {
     const title = document.createElement("strong");
     title.textContent = person?.name || "未知人物";
     const detail = document.createElement("span");
-    detail.textContent = (index ? "下一代 · " : "上一代 · ") + personGenerationName(person?.generation_id);
+    detail.textContent = (index ? "子女 · " : "父母 · ") + personGenerationName(person?.generation_id);
     meta.append(title, detail);
     const role = document.createElement("span");
     role.className = "relationship-role";
@@ -2629,6 +3211,7 @@ async function openRelationshipDialog(id) {
   $("#child-label").value = special ? item.child_label || "" : "";
   syncRelationshipFields();
   $("#relationship-dialog").showModal();
+  renderWriteAccess();
 }
 function closeRelationshipDialog() {
   if (relationshipSaving) return;
@@ -2655,19 +3238,19 @@ function syncRelationshipFields() {
   renderRelationshipContext(item);
   const [parentRole] = relationshipDialogRoles(item);
   $("#relationship-description").textContent = special
-    ? (isReadonlyDemo() ? "已记录的特殊关系称谓：" + item.parent_label + " / " + item.child_label
-      : "分别填写两位人物在这段关系中的称谓，例如养父与养女。")
+    ? "分别填写两位人物在这段关系中的称谓，例如养父与养女。"
     : "「" + personName(ends.sourceId) + "」是「" + personName(ends.targetId) + "」的" + parentRole +
-      "，称谓由双方性别与相邻代际自动确定。";
+      "，称谓由双方性别与这条亲子连线确定。" +
+      (experimentalCrossGeneration() ? "画布行距不参与称谓推导。" : "");
 }
 function setRelationshipSaving(saving) {
   relationshipSaving = saving;
   $("#relationship-form").setAttribute("aria-busy", String(saving));
   $$("input, select, button", $("#relationship-form")).forEach((control) => control.disabled = saving);
   $("#relationship-save").textContent = saving ? "保存中…" : "保存关系";
+  renderWriteAccess();
 }
 async function saveRelationship(event) {
-  if (preventDemoEdit(event)) return;
   event.preventDefault();
   if (relationshipSaving) return;
   const id = state.editingRelationshipId;
@@ -2682,20 +3265,18 @@ async function saveRelationship(event) {
   }
   setRelationshipSaving(true);
   try {
-    state.workspace = workspaceFrom(await api("/api/relationships/" + encodeURIComponent(id), {
+    replaceWorkspace(await api("/api/relationships/" + encodeURIComponent(id), {
       method: "PATCH", body: JSON.stringify(payload),
     }));
     setRelationshipSaving(false);
     closeRelationshipDialog();
     render();
-    if (state.perspective) prefetchRelationshipPath();
     showToast("关系已保存", "success");
   } catch (error) {
     $("#relationship-description").textContent = "保存失败：" + error.message + "，请重试。";
   } finally { setRelationshipSaving(false); }
 }
 async function deleteRelationship() {
-  if (preventDemoEdit()) return;
   if (relationshipSaving || !state.editingRelationshipId) return;
   const id = state.editingRelationshipId;
   const item = relationshipById(id);
@@ -2705,16 +3286,16 @@ async function deleteRelationship() {
   })) return;
   try {
     setRelationshipSaving(true);
-    state.workspace = workspaceFrom(await api("/api/relationships/" + encodeURIComponent(id), { method: "DELETE" }));
+    replaceWorkspace(await api("/api/relationships/" + encodeURIComponent(id), { method: "DELETE" }));
     setRelationshipSaving(false);
     closeRelationshipDialog();
     render();
-    if (state.perspective) prefetchRelationshipPath();
     showToast("关系已删除", "success", undoAction());
   } catch (error) { $("#relationship-description").textContent = "删除失败：" + error.message; }
   finally { setRelationshipSaving(false); }
 }
 async function enterPerspective() {
+  invalidateExperimentalTasks();
   if ($("#person-dialog").open && !await closePersonDialog()) return;
   if (state.perspective) return;
   exitLinkMode(false);
@@ -2728,6 +3309,7 @@ async function enterPerspective() {
   render();
 }
 function exitPerspective() {
+  invalidateExperimentalTasks();
   cancelActivePersonDrag();
   invalidateRelationshipTasks();
   state.perspective = false; state.selectionA = null; state.selectionB = null;
@@ -2743,6 +3325,7 @@ function selectPerspectiveTarget(slot) {
 }
 
 function clearPerspectiveSelection(slot) {
+  invalidateExperimentalTasks();
   if (!state.perspective) return;
   invalidateRelationshipTasks();
   state[slot === "a" ? "selectionA" : "selectionB"] = null;
@@ -2753,6 +3336,7 @@ function clearPerspectiveSelection(slot) {
 }
 
 function selectPerspectivePerson(id) {
+  invalidateExperimentalTasks();
   if (!state.perspective) return;
   const key = state.selectionTarget === "a" ? "selectionA" : "selectionB";
   const otherKey = state.selectionTarget === "a" ? "selectionB" : "selectionA";
@@ -2764,6 +3348,8 @@ function selectPerspectivePerson(id) {
   const restoreFocus = document.activeElement?.classList?.contains("person-node");
   state.focusedPersonId = id;
   invalidateRelationshipTasks();
+  // Picking on the canvas always returns the tray to the A/B view it fills.
+  advancedQueryState().open = false;
   state[key] = id;
   if (!state[otherKey]) state.selectionTarget = otherKey === "selectionA" ? "a" : "b";
   hideToast();
@@ -2775,6 +3361,7 @@ function selectPerspectivePerson(id) {
   if (state.selectionA && state.selectionB) prefetchRelationshipPath();
 }
 function renderSelection() {
+  renderAdvancedQuery();
   const visibilityChanged = $("#selection-tray").hidden !== !state.perspective;
   $("#selection-tray").hidden = !state.perspective;
   updateNavigatorSelection();
@@ -2824,20 +3411,26 @@ function renderSelection() {
     label = "重试复制";
     status = "复制失败：" + state.relationshipCopyError;
   } else if (hasSelection && !state.relationshipCopyText) {
-    label = "暂无关系";
-    status = "未找到 A 与 B 之间的关系，可替换任一人物";
+    label = "暂无关系链";
+    status = "当前记录中未找到关系链，可替换任一人物";
   } else if (hasSelection) {
     status = "关系已就绪 · 点选人物替换 " + state.selectionTarget.toUpperCase();
   }
+  const copied = Boolean(hasSelection && !busy && state.relationshipCopiedText &&
+    state.relationshipCopiedText === state.relationshipCopyText && !state.relationshipPathError && !state.relationshipCopyError);
+  if (copied) { label = "已复制"; status = "已复制到剪贴板 · 可直接粘贴"; }
+  if (experimentsEnabled() && advancedQueryState().open && !busy) status = "用一句话查找亲属，点选结果即可转入 A / B";
   copyButton.disabled = !hasSelection || busy ||
     (!state.relationshipCopyText && !state.relationshipPathError);
-  copyButton.replaceChildren(createIcon(state.relationshipPathError ? "undo" : "copy"), document.createTextNode(label));
+  copyButton.replaceChildren(createIcon(state.relationshipPathError ? "undo" : copied ? "check" : "copy"), document.createTextNode(label));
+  copyButton.classList.toggle("is-copied", copied);
   copyButton.setAttribute("aria-label", label);
   copyButton.setAttribute("aria-busy", String(busy));
   $("#selection-status").textContent = status;
   $("#selection-status").dataset.state = state.relationshipPathError || state.relationshipCopyError ? "error" : "";
   $("#selection-tray").classList.toggle("is-ready", Boolean(hasSelection && state.relationshipCopyText && !busy && !state.relationshipPathError && !state.relationshipCopyError));
   renderSelectionResult(hasSelection);
+  syncSelectionTrayBounds();
 }
 // Shows the computed kinship chain instead of hiding it behind the copy action.
 function renderSelectionResult(hasSelection) {
@@ -2858,11 +3451,10 @@ function renderSelectionResult(hasSelection) {
   } else if (state.relationshipPathError) {
     status = "error";
     result.replaceChildren(paragraph("result-placeholder", "称谓暂时无法计算，请重试。"));
-  } else if (!state.relationshipCopyText) {
+  } else if (!state.relationshipPath) {
     status = "none";
-    result.replaceChildren(paragraph("result-placeholder", "两人之间还没有可以追溯的亲子连线。"));
+    result.replaceChildren(paragraph("result-placeholder", "当前记录中未找到连接两人的关系链。"));
   } else {
-    status = "ready";
     const name = (id, slot) => {
       const element = document.createElement("span");
       element.className = "result-person";
@@ -2872,8 +3464,14 @@ function renderSelectionResult(hasSelection) {
     };
     const lead = paragraph("result-lead");
     lead.append(name(state.selectionB, "b"), " 是 ", name(state.selectionA, "a"), " 的");
-    const chain = paragraph("result-chain");
-    (state.relationshipPath?.labels || []).forEach((label, index) => {
+    const direct = experimentsEnabled() ? state.relationshipPath.direct_relationship : null;
+    const appellation = direct?.status === "unsupported" ? direct.appellation : null;
+    const hasAppellation = appellation && [appellation.label, appellation.explanation, appellation.note]
+      .every((value) => typeof value === "string" && value.trim());
+    const labels = state.relationshipPath.labels || [];
+    const chain = paragraph(labels.length ? "result-chain" : "result-placeholder",
+      labels.length ? "" : "当前记录中未找到连接两人的关系链。");
+    labels.forEach((label, index) => {
       if (index) {
         const joiner = document.createElement("span");
         joiner.className = "chain-joiner";
@@ -2885,9 +3483,101 @@ function renderSelectionResult(hasSelection) {
       step.textContent = label;
       chain.append(step);
     });
-    result.replaceChildren(lead, chain);
+    status = labels.length ? "ready" : "none";
+    result.replaceChildren(lead);
+    if (!hasAppellation) result.append(chain);
+    if (direct) {
+      const section = document.createElement("section");
+      section.className = "direct-relationship";
+      section.dataset.state = direct.status;
+      const composition = direct.status === "unsupported" ? direct.composition : null;
+      const hasComposition = composition && [composition.label, composition.explanation, composition.note]
+        .every((value) => typeof value === "string" && value.trim());
+      const heading = hasAppellation ? "亲戚称呼 · 实验" : hasComposition ? "关系链化简 · 实验" : "直接关系推导 · 实验";
+      section.dataset.kind = hasAppellation ? "appellation" : hasComposition ? "composition" : "direct";
+      section.setAttribute("aria-label", heading);
+      section.append(paragraph("direct-heading", heading));
+      if (direct.status === "resolved") {
+        for (const item of direct.results || []) {
+          const entry = document.createElement("div");
+          entry.className = "direct-entry";
+          entry.append(paragraph("direct-label", item.label));
+          if (item.explanation) entry.append(evidenceParagraph("direct-explanation", "依据：" + item.explanation));
+          section.append(entry);
+        }
+      } else if (hasAppellation) {
+        const entry = document.createElement("div");
+        entry.className = "direct-entry";
+        entry.append(paragraph("direct-label", appellation.label));
+        section.append(entry);
+      } else if (hasComposition) {
+        const entry = document.createElement("div");
+        entry.className = "direct-entry";
+        entry.append(paragraph("direct-label", composition.label),
+          evidenceParagraph("direct-explanation", "依据：" + composition.explanation));
+        section.append(entry);
+      } else {
+        section.append(paragraph("direct-explanation", directRelationshipMessage(direct)));
+      }
+      const note = hasAppellation ? appellation.note : hasComposition ? composition.note : direct.note;
+      if (note) section.append(paragraph("direct-note", note));
+      if (hasAppellation) {
+        const details = document.createElement("details");
+        details.className = "relationship-evidence";
+        details.open = state.relationshipEvidenceOpen;
+        const pathResult = state.relationshipPath;
+        const summary = document.createElement("summary");
+        summary.textContent = "查看具体关系依据";
+        summary.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (state.relationshipPath !== pathResult) return;
+          // Save synchronously: bubbling handlers or copy feedback may rebuild this disclosure.
+          state.relationshipEvidenceOpen = !details.open;
+          details.open = state.relationshipEvidenceOpen;
+        });
+        details.append(summary, evidenceParagraph("direct-explanation", "称呼依据：" + appellation.explanation),
+          paragraph("direct-heading", "原关系链"), chain);
+        if (hasComposition) {
+          const entry = document.createElement("div");
+          entry.className = "direct-entry";
+          entry.append(paragraph("direct-heading", "原关系链化简"), paragraph("direct-label", composition.label),
+            evidenceParagraph("direct-explanation", "依据：" + composition.explanation));
+          details.append(entry);
+        }
+        section.append(details);
+      }
+      result.append(section);
+    }
   }
   result.dataset.state = status;
+  // Newly arrived content settles in; repeated renders of the same result stay still.
+  const revealKey = status === "empty" ? "" : [status, state.selectionA, state.selectionB, state.pathRequestId].join(":");
+  result.classList.toggle("is-revealing", Boolean(revealKey) && result.dataset.revealKey !== revealKey);
+  result.dataset.revealKey = revealKey;
+}
+// Evidence keeps its exact wording; only the arrows between people get a quieter weight.
+function evidenceParagraph(className, text) {
+  const element = document.createElement("p");
+  element.className = className;
+  String(text).split("→").forEach((part, index) => {
+    if (index) {
+      const arrow = document.createElement("span");
+      arrow.className = "evidence-arrow";
+      arrow.textContent = "→";
+      element.append(arrow);
+    }
+    if (part) element.append(document.createTextNode(part));
+  });
+  return element;
+}
+function directRelationshipMessage(direct) {
+  return direct.status === "disconnected"
+    ? "当前记录中没有可供推导的关系链；这不代表两人没有亲属关系。"
+    : "当前关系链暂不支持直接称谓推导，请参考上方逐级关系。";
+}
+function relationshipCopySummary(result, pathText, a, b) {
+  if (result.found === false || !pathText) return null;
+  return personName(b) + " 是 " + personName(a) + " 的：" + pathText;
 }
 function relationshipPathLabels(result, pathText) {
   const personIds = Array.isArray(result?.person_ids) ? result.person_ids : [];
@@ -2921,10 +3611,10 @@ async function prefetchRelationshipPath() {
   if (!state.perspective || !state.selectionA || !state.selectionB) return;
   const a = state.selectionA;
   const b = state.selectionB;
-  const token = ++state.pathRequestId;
-  invalidateCopyRequest();
-  state.relationshipCopyText = null;
-  state.relationshipPathError = null;
+  const workspace = state.workspace;
+  const epoch = state.configEpoch || 0;
+  invalidateRelationshipTasks();
+  const token = state.pathRequestId;
   state.relationshipPathLoading = true;
   renderSelection();
   try {
@@ -2932,18 +3622,16 @@ async function prefetchRelationshipPath() {
     try {
       result = await api("/api/path?from=" + encodeURIComponent(a) + "&to=" + encodeURIComponent(b));
     } catch (error) {
-      if (!isPathRequestCurrent(token, a, b)) return;
+      if (!isPathRequestCurrent(token, a, b, workspace, epoch)) return;
       state.relationshipPathError = error instanceof Error ? error.message : "未知错误";
       return;
     }
-    if (!isPathRequestCurrent(token, a, b)) return;
+    if (!isPathRequestCurrent(token, a, b, workspace, epoch)) return;
     const pathText = relationshipPathText(result);
-    state.relationshipCopyText = result.found === false || !pathText
-      ? null
-      : personName(b) + " 是 " + personName(a) + " 的：" + pathText;
-    state.relationshipPath = state.relationshipCopyText ? { labels: relationshipPathLabels(result, pathText) } : null;
+    state.relationshipCopyText = relationshipCopySummary(result, pathText, a, b);
+    state.relationshipPath = { ...result, labels: result.found === false ? [] : relationshipPathLabels(result, pathText) };
   } finally {
-    if (isPathRequestCurrent(token, a, b)) {
+    if (isPathRequestCurrent(token, a, b, workspace, epoch)) {
       state.relationshipPathLoading = false;
       renderSelection();
     }
@@ -2986,7 +3674,7 @@ async function writeClipboardText(text) {
 }
 
 async function copyRelationship() {
-  if (state.copyInFlight || state.relationshipPathLoading || !state.perspective) return;
+  if (state.configBusy || state.configError || state.copyInFlight || state.relationshipPathLoading || !state.perspective) return;
   if (state.relationshipPathError) {
     await prefetchRelationshipPath();
     return;
@@ -3010,6 +3698,15 @@ async function copyRelationship() {
     if (!isCopyRequestCurrent(token, a, b) ||
         sentence !== state.relationshipCopyText) return;
     showToast("关系已复制到剪贴板", "success");
+    // The pressed button also confirms the copy, then quietly returns to its resting label.
+    const copiedAt = Date.now();
+    state.relationshipCopiedText = sentence;
+    state.relationshipCopiedAt = copiedAt;
+    setTimeout(() => {
+      if (state.relationshipCopiedAt !== copiedAt || state.relationshipCopiedText !== sentence) return;
+      state.relationshipCopiedText = null;
+      if (state.perspective) renderSelection();
+    }, 1800);
   } catch (error) {
     if (!isCopyRequestCurrent(token, a, b) ||
         sentence !== state.relationshipCopyText) return;
@@ -3045,6 +3742,35 @@ function resolveConfirmation(accepted) {
 }
 
 function bindEvents() {
+  $("#experiments-toggle").addEventListener("click", toggleExperimentalFeatures);
+  $("#labs-toggle").addEventListener("click", toggleLabsPopover);
+  $("#read-only-enable").addEventListener("click", () => { if (!experimentsEnabled()) toggleExperimentalFeatures(); });
+  $("#config-retry").addEventListener("click", retryRuntimeConfig);
+  $("#check-genealogy").addEventListener("click", openGenealogyCheck);
+  $("#labs-run-check").addEventListener("click", () => { closeLabsPopover(); openGenealogyCheck(); });
+  $("#check-close").addEventListener("click", closeGenealogyCheck);
+  $("#check-refresh").addEventListener("click", runGenealogyCheck);
+  $("#check-dialog").addEventListener("cancel", (event) => { event.preventDefault(); closeGenealogyCheck(); });
+  // The tray offers two ways to ask: picking A/B on the canvas, or one sentence.
+  $("#advanced-query-pick").addEventListener("click", () => {
+    const query = advancedQueryState();
+    if (!query.open) return;
+    query.open = false; renderSelection();
+  });
+  $("#advanced-query-toggle").addEventListener("click", () => {
+    if (!experimentsEnabled()) return;
+    const query = advancedQueryState(); query.open = true; renderSelection();
+    $("#advanced-query-input").focus();
+  });
+  $(".tray-tabs").addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key) || !experimentsEnabled()) return;
+    event.preventDefault();
+    const query = advancedQueryState(); query.open = !query.open; renderSelection();
+    $(query.open ? "#advanced-query-toggle" : "#advanced-query-pick").focus();
+  });
+  $("#advanced-query-form").addEventListener("submit", (event) => { event.preventDefault(); runAdvancedQuery(); });
+  $("#advanced-query-input").addEventListener("input", resetAdvancedQueryInput);
+  $$("[data-query-example]").forEach((button) => button.addEventListener("click", () => queryExample(button.dataset.queryExample)));
   $("#workspace-sidebar-toggle").addEventListener("click", toggleWorkspaceSidebar);
   $("#workspace-overview").addEventListener("click", () => {
     state.focusedGenerationId = null;
@@ -3057,6 +3783,14 @@ function bindEvents() {
     if (!button || !event.currentTarget.contains(button)) return;
     closeWorkspaceSidebar();
     requestAnimationFrame(() => focusGenerationInCanvas(button.dataset.generationId));
+  });
+  // Pointing at a generation in the directory tints its row on the canvas.
+  $("#generation-navigation").addEventListener("pointerover", (event) => {
+    const id = event.target.closest(".generation-nav-item")?.dataset.generationId;
+    $$(".generation-lane").forEach((lane) => lane.classList.toggle("is-previewed", Boolean(id) && String(lane.dataset.generationId) === String(id)));
+  });
+  $("#generation-navigation").addEventListener("pointerleave", () => {
+    $$(".generation-lane.is-previewed").forEach((lane) => lane.classList.remove("is-previewed"));
   });
   $("#help-toggle").addEventListener("click", toggleWorkspaceHelp);
   $("#history-undo").addEventListener("click", () => travelHistory("undo"));
@@ -3099,7 +3833,7 @@ function bindEvents() {
   $("#person-generation").addEventListener("change", personInputChanged);
   $("#person-gender").addEventListener("change", personInputChanged);
   $("#person-photo").addEventListener("change", () => {
-    if (preventDemoEdit()) return;
+    if (!canEditWorkspace()) return;
     const file = $("#person-photo").files?.[0];
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
@@ -3115,15 +3849,14 @@ function bindEvents() {
     personInputChanged();
   });
   $("#person-photo-remove").addEventListener("click", () => {
-    if (preventDemoEdit()) return;
+    if (!canEditWorkspace()) return;
     releasePersonPhotoPreview();
     $("#person-photo").value = "";
     personEditor.removePhoto = true;
     personInputChanged();
   });
   $(".photo-picker").addEventListener("keydown", (event) => {
-    if (preventDemoEdit(event)) return;
-    if ((event.key === "Enter" || event.key === " ") && !personEditor.saving) {
+    if ((event.key === "Enter" || event.key === " ") && !personEditor.saving && canEditWorkspace()) {
       event.preventDefault();
       $("#person-photo").click();
     }
@@ -3144,6 +3877,9 @@ function bindEvents() {
     $("#clear-selection-" + slot).addEventListener("click", () => clearPerspectiveSelection(slot));
   });
   $("#swap-selection").addEventListener("click", () => {
+    const swapIcon = $("#swap-selection .icon");
+    if (swapIcon) swapIcon.style.rotate = ((parseFloat(swapIcon.style.rotate) || 0) + 180) + "deg";
+    invalidateExperimentalTasks();
     invalidateRelationshipTasks();
     [state.selectionA, state.selectionB] = [state.selectionB, state.selectionA];
     hideToast();
@@ -3151,6 +3887,9 @@ function bindEvents() {
     prefetchRelationshipPath();
   });
   $("#export-relationship").addEventListener("click", copyRelationship);
+  for (const [type, handler] of [["pointerenter", pauseToast], ["pointerleave", resumeToast], ["focusin", pauseToast], ["focusout", resumeToast]]) {
+    $("#toast").addEventListener(type, handler);
+  }
   $("#theme-toggle").addEventListener("click", toggleTheme);
   matchMedia(THEME_QUERY).addEventListener?.("change", (event) => {
     if (!localStorage.getItem(THEME_KEY)) setTheme(event.matches ? "mocha" : "latte");
@@ -3169,19 +3908,17 @@ function bindEvents() {
     if (relative) openRelativeProfile(relative.dataset.relativeId);
   });
   $("#person-relative-add").addEventListener("change", (event) => {
-    $("#person-relative-confirm").disabled = !event.currentTarget.value;
+    $("#person-relative-confirm").disabled = !canEditWorkspace() || !event.currentTarget.value;
   });
   $("#person-relative-confirm").addEventListener("click", addRelativeFromInspector);
   $("#person-form").addEventListener("keydown", (event) => {
-    if (isReadonlyDemo() && event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); return; }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !personEditor.saving) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !personEditor.saving && canEditWorkspace()) {
       event.preventDefault();
       $("#person-form").requestSubmit();
     }
   });
   $("#person-form").addEventListener("dragover", (event) => {
-    if (preventDemoEdit(event)) return;
-    if (!event.dataTransfer?.types?.includes("Files") || personEditor.saving) return;
+    if (!event.dataTransfer?.types?.includes("Files") || personEditor.saving || !canEditWorkspace()) return;
     event.preventDefault();
     $(".photo-picker").classList.add("is-drop-target");
   });
@@ -3246,6 +3983,7 @@ function bindEvents() {
   });
   document.addEventListener("click", (event) => {
     if (!event.target.closest("#help-toggle,#help-popover")) closeWorkspaceHelp();
+    if (!event.target.closest("#labs-toggle,#labs-popover")) closeLabsPopover();
     if (!event.target.closest("#workspace-sidebar,#workspace-sidebar-toggle")) closeWorkspaceSidebar();
     if (!event.target.closest(".generation-menu-wrap")) closeGenerationMenu();
     if (!event.target.closest(".person-search")) closeSearchResults();
@@ -3274,6 +4012,10 @@ function bindEvents() {
         clearNavigatorDrag();
         return;
       }
+      if (closeLabsPopover(true)) {
+        event.preventDefault();
+        return;
+      }
       if (closeWorkspaceHelp(true) || closeWorkspaceSidebar(true)) {
         event.preventDefault();
         return;
@@ -3281,6 +4023,13 @@ function bindEvents() {
       if ($("#person-dialog").open) {
         event.preventDefault();
         await closePersonDialog();
+        return;
+      }
+      // Esc in the sentence box clears it first, then returns to the A/B tab, before leaving the mode.
+      if (event.target.id === "advanced-query-input" && advancedQueryState().open) {
+        event.preventDefault();
+        if (event.target.value) { event.target.value = ""; resetAdvancedQueryInput(); }
+        else { advancedQueryState().open = false; renderSelection(); $("#advanced-query-toggle").focus(); }
         return;
       }
       const hadPopover = !$("#generation-menu").hidden || !$("#search-results").hidden;
@@ -3323,6 +4072,12 @@ function bindEvents() {
     }
   });
   board.addEventListener("wheel", handleCameraWheel, { passive: false });
+  // Double-click on empty canvas zooms in around the pointer; with Shift it zooms out.
+  board.addEventListener("dblclick", (event) => {
+    if (isCameraInteractiveTarget(event.target) || state.camera.spaceHeld || state.drag) return;
+    event.preventDefault();
+    setCameraScale(state.camera.scale * (event.shiftKey ? 1 / 1.6 : 1.6), event.clientX, event.clientY, true);
+  });
   document.addEventListener("keydown", handleSpaceKeydown, true);
   document.addEventListener("keyup", handleSpaceKeyup, true);
   $("#navigator-toggle").addEventListener("click", toggleNavigator);
@@ -3354,7 +4109,7 @@ function bindEvents() {
 function handleShortcutKeydown(event) {
   if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
   if (event.target.closest?.("input,textarea,select,dialog,[contenteditable=true]") || $("dialog:modal")) return;
-  const hasPeople = people().length > 0;
+  const hasPeople = !$("#link-mode").hidden;
   const shortcuts = {
     "?": () => toggleWorkspaceHelp(event),
     "/": () => { $("#person-search-input").focus(); $("#person-search-input").select(); },
@@ -3364,7 +4119,7 @@ function handleShortcutKeydown(event) {
     "0": resetCamera,
     f: fitCamera,
     v: () => { if (state.linkMode || state.perspective) enterSelectMode(); },
-    l: () => { if (hasPeople && !isReadonlyDemo()) toggleLinkMode(); },
+    l: () => { if (hasPeople) toggleLinkMode(); },
     r: () => { if (hasPeople) state.perspective ? exitPerspective() : enterPerspective(); },
   };
   const action = shortcuts[event.key.length === 1 ? event.key.toLowerCase() : ""] || shortcuts[event.key];
@@ -3394,10 +4149,22 @@ function setTheme(theme, persist = false) {
   $("#theme-toggle").setAttribute("aria-label", theme === "latte" ? "切换到深色外观" : "切换到浅色外观");
   const themeColor = $("meta[name=theme-color]");
   if (themeColor) themeColor.content = theme === "latte" ? "#f4f0e8" : "#15130f";
+  // The macOS host tints its title bar to match; browsers have no such hook.
+  globalThis.geneaDesktop?.appearanceChanged?.(theme, Boolean(localStorage.getItem(THEME_KEY)) || localStorage.getItem("genea-theme") === "mocha");
   requestAnimationFrame(drawRelationships);
 }
+// Inside the macOS app each window is one named family; the native title bar is blended into the page.
+function applyDesktopContext() {
+  const desktop = globalThis.geneaDesktop;
+  if (!desktop) return;
+  document.documentElement.classList.add("is-desktop-app");
+  if (desktop.familyName) {
+    $("#workspace-name").textContent = desktop.familyName;
+    document.title = desktop.familyName + " · Genea";
+  }
+}
+applyDesktopContext();
 setTheme(state.theme);
 bindEvents();
-configureReadonlyDemo();
 syncRelationshipFields();
 loadWorkspace().catch((error) => { showToast(error.message, "error"); render(); });

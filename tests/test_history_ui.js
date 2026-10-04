@@ -31,9 +31,14 @@ function assert(value, name) {
   checks += 1;
   if (!value) throw new Error(name);
 }
+async function loadRuntimeConfig() { state.config = await api("/api/config"); }
+function canEditWorkspace() { return true; }
+function invalidateExperimentalTasks() {}
+function renderWriteAccess() {}
 function renderHistory() {}
 function renderWorkspaceSaveState() {}
 function render() {}
+function renderSelection() {}
 function showToast() {}
 function cancelActivePersonDrag() {}
 function invalidateRelationshipTasks() { state.relationshipCopyText = null; }
@@ -59,7 +64,6 @@ function extract(startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-eval(extract("function isReadonlyDemo(", "async function api("));
 eval(extract("async function api(", "function hideToast("));
 eval(extract("function workspaceFrom(", "function generations("));
 eval(extract("function people()", "function peopleInGeneration("));
@@ -104,6 +108,7 @@ async function run() {
   state.history = { undo_label: "编辑人物", redo_label: null };
   fetch = async (path, options) => {
     if (options.method === "POST") throw new Error("failed undo");
+    if (path === "/api/config") return response({ experimental_features_enabled: false, experimental_cross_generation: false, read_only: false, read_only_reason: null });
     if (path === "/api/workspace") {
       return response({
         generations: [],
@@ -122,6 +127,7 @@ async function run() {
 
   fetch = async (path, options) => {
     if (options.method === "POST") throw new Error("failed undo");
+    if (path === "/api/config") return response({ experimental_features_enabled: false, experimental_cross_generation: false, read_only: false, read_only_reason: null });
     if (path === "/api/workspace") {
       return response({ generations: [], people: { b: { id: "b" } }, relationships: [] });
     }

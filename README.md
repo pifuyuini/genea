@@ -1,120 +1,99 @@
 # Genea
 
-一个仍在开发中的本地家谱画布。用人物卡片、代际排布和关系路径，浏览与整理家族结构。
+Genea 是在自己电脑上运行的家谱画布，提供人物资料、代际排布、照片、亲属跳转和两人关系路径。
 
-**当前版本：0.1.0-preview.1（预览版）。** 功能与数据模型还会调整。
+**当前公开版本：0.2.0-preview.1。** 新版加入 macOS App、跨行亲子关系、增强亲属称谓、家谱检查与受限语法的高级查询，功能与数据模型仍会调整。
 
-[在线体验《红楼梦》Demo](https://pifuyuini.github.io/genea/) · [下载源码 ZIP](https://github.com/pifuyuini/genea/releases/download/v0.1.0-preview.1/genea-v0.1.0-preview.1-source.zip) · [版本说明](https://github.com/pifuyuini/genea/releases/tag/v0.1.0-preview.1)
+[新版 Demo2：《百年孤独》](https://pifuyuini.github.io/genea/demo2/) · [原版 Demo1：《红楼梦》](https://pifuyuini.github.io/genea/) · [下载浏览器源码 ZIP](https://github.com/pifuyuini/genea/releases/download/v0.2.0-preview.1/genea-v0.2.0-preview.1-source.zip) · [下载 macOS App](https://github.com/pifuyuini/genea/releases/download/v0.2.0-preview.1/genea-v0.2.0-preview.1-macos-arm64.zip) · [版本说明](https://github.com/pifuyuini/genea/releases/tag/v0.2.0-preview.1)
 
-![Genea《红楼梦》演示全貌](demo/screenshots/01-overview.jpg)
+在线演示均为只读文学样例；Demo1 保留原版页面，Demo2 展示新版功能。下载到本机后可以编辑，自己的家谱和照片保存在本机。公开发行不包含任何个人家谱。
 
-## 两种体验
+## macOS App
 
-| | 在线 Demo | 下载后本地运行 |
-| --- | --- | --- |
-| 数据 | 《红楼梦》38 位人物、6 代、42 条关系 | 可从空白家谱开始，也可运行独立的文学 Demo |
-| 浏览 | 缩放、平移、全览、缩略图、搜索、人物详情、A/B 关系路径 | 同样支持 |
-| 编辑 | 只读 | 人物与代际编辑、排序、连线、照片、撤销与重做 |
-| 运行方式 | GitHub Pages 纯静态，无需安装 | Python 3.12 或更高版本，无第三方依赖 |
+支持 **Apple Silicon（arm64）、macOS 13 或更高版本**。下载并解压 macOS ZIP，将 `Genea.app` 拖到应用程序目录后打开；App 自带完整 Python 运行时，无需安装 Python 或第三方库。内置两份文学 Demo，可用于体验；新家谱从空白开始。
 
-在线 Demo 的操作不会写入人物数据。下载完整版后可体验编辑，数据保存在自己的电脑上。
+此下载包未使用 Developer ID 签名，也未经过 Apple 公证。若 macOS 阻止打开，先确认下载来自上方官方版本链接，再遵循 [Apple 的安全打开 App 说明](https://support.apple.com/102445)，在“系统设置 → 隐私与安全性”中使用系统提供的打开选项。
 
-## 下载、安装与启动
+人物数据与照片保存于所选家谱目录。备份时先退出 App，再复制整个目录。首次公开的原生 App 尚为预览版，重要数据请保留备份。Intel Mac 可使用下述浏览器源码版。
 
-1. 下载上方 ZIP，解压后进入包含 `server.py` 的目录。
-2. 安装 [Python 3.12 或更高版本](https://www.python.org/downloads/)。无需运行 pip、npm 或安装其他依赖。
-3. 在该目录打开终端，选择一种启动方式。
+## 浏览器源码版
 
-**先体验《红楼梦》Demo**
+需要 **Python 3.12 或更高版本**，没有第三方 Python 运行时依赖。下载源码 ZIP，解压后进入含 `server.py` 的目录。
 
-macOS / Linux：
+建立空白家谱：
 
 ```sh
-python3 demo/run_demo.py
+python3 -B server.py --host 127.0.0.1 --port 8765
 ```
 
-Windows：
+打开 <http://127.0.0.1:8765>。首次运行创建空白工作区，数据保存于 `data/`、照片位于 `data/photos/`；停止服务后复制整个 `data/` 即可备份。按 `Ctrl+C` 停止。
 
-```powershell
-py -3 demo/run_demo.py
-```
-
-浏览器打开 <http://127.0.0.1:8766>。Demo 每次启动会从公开样例重置独立的数据目录；加上 `--keep` 可保留上次的演示编辑。按 `Ctrl+C` 停止服务。
-
-**建立自己的家谱**
-
-macOS / Linux：
+体验新版《百年孤独》Demo2：
 
 ```sh
-python3 server.py --host 127.0.0.1 --port 8765
+python3 -B demo2/run_demo.py
 ```
 
-Windows：
+打开 <http://127.0.0.1:8767>。每次默认启动创建独立的工作副本，并在终端显示其 `data` 目录；退出后仍保留编辑结果。继续已有副本时明确传入 `--data-dir`，详见 [Demo2 说明](demo2/README.md)。
 
-```powershell
-py -3 server.py --host 127.0.0.1 --port 8765
+体验《红楼梦》数据：
+
+```sh
+python3 -B demo/run_demo.py
 ```
 
-浏览器打开 <http://127.0.0.1:8765>。首次运行自动创建空白工作区，个人数据保存于 `data/`，照片位于 `data/photos/`。停止服务后，复制整个 `data/` 文件夹即可备份；恢复时将其放回应用目录。公开源码包不包含任何个人家谱。
+打开 <http://127.0.0.1:8766>。该启动器每次重置独立的演示副本；加 `--keep` 保留上一次演示编辑。本地两份文学样例都使用新版界面，在线 Demo1 保留原版界面。
 
-若提示端口被占用，换用例如 `--port 8767`，并访问对应地址。若提示语法或版本错误，先用 `python3 --version`（Windows：`py -3 --version`）确认版本至少为 3.12。
+Windows 将上述 `python3` 替换为 `py -3`。端口被占用时传入其他 `--port` 并使用对应地址。Python 安装程序见 [python.org](https://www.python.org/downloads/)；无需运行 pip 或 npm。
 
 ## 常用操作
 
-- 滚轮缩放；按住空格拖动平移；点击「全览」查看完整结构，点击倍率恢复 100%。
-- 使用右下角缩略图定位；缩略图获得焦点后可用方向键移动视野。
-- 搜索人物并打开详情；选择 A、B 两个人物，查看关系路径；支持浅色与深色主题。
-- 本地完整版中可拖动人物排序或跨代移动、维护关系、上传头像、撤销与重做。详细快捷键见应用内帮助。
+- 滚轮缩放，按空格拖动画布，点击“全览”查看完整家谱。
+- 搜索人物并打开资料；选择 A、B 两人查看登记路径与亲属结果，支持浅色与深色主题。
+- 本地版可编辑人物和代际、连线、上传照片、撤销与重做。
+- 实验功能总开关控制跨行编辑、增强称谓、家谱检查和高级查询；关闭时保留已登记的跨行数据，相关工作区会暂为只读。在线 Demo2 始终只读。
+- 模型以亲子登记为依据，未单独登记夫妻边；未收录的关系不能由软件补成真实家族关系。
 
-## 演示内容
+## 本地重建 macOS App
 
-公开样例、全部 38 张头像和 6 张截图均位于 `demo/`；介绍与建模限制见 [Demo 说明](demo/README.md)。该样例是文学人物关系的可视化示例，并非《红楼梦》人物考据数据库。
-
-当前关系模型以相邻代际的亲子边为基础，夫妻关系尚未单独建模；称谓与路径结果受录入结构影响。应用尚处于预览阶段，重要数据请另行备份。
-
-## 项目结构与开发
-
-```text
-server.py            本地 HTTP 服务与存储
-genealogy_core.py    家谱与关系路径计算
-static/              共享前端
-demo/                公开文学样例、头像、截图和静态适配器
-docs/                生成的 GitHub Pages 站点
-scripts/             源码打包工具
-tests/               Python 与 JavaScriptCore 测试
-```
-
-重建静态 Demo：
+在 Apple Silicon Mac 上使用已有的 Xcode 命令行工具。以下流程只把官方独立 CPython 解压到当前源码目录的 `tmp/`，不安装产品依赖：
 
 ```sh
-python3 demo/build_pages.py
-python3 -m http.server 8000 --directory docs
+BUILD_DIR="tmp/$(date +%Y%m%d-%H%M%S)-macos-build"
+mkdir -p "$BUILD_DIR"
+touch "$BUILD_DIR/.codex-tmp"
+curl --fail --location \
+  'https://github.com/astral-sh/python-build-standalone/releases/download/20250708/cpython-3.12.11%2B20250708-aarch64-apple-darwin-install_only.tar.gz' \
+  --output "$BUILD_DIR/cpython.tar.gz"
+tar -xzf "$BUILD_DIR/cpython.tar.gz" -C "$BUILD_DIR"
+"$BUILD_DIR/python/bin/python3.12" -B desktop/macos/build_app.py \
+  --runtime "$BUILD_DIR/python" --output "$BUILD_DIR/Genea.app"
+open "$BUILD_DIR/Genea.app"
 ```
 
-打开 <http://127.0.0.1:8000>。不要直接双击 HTML 文件；浏览器需要通过 HTTP 读取静态 JSON。构建时预先计算全部人物对的关系路径；Pages 只读取公开 JSON 和图片，所有编辑入口均禁用。网站资源使用相对路径，支持项目子路径。
+也可通过 `--runtime` 指向已有的完整 uv standalone CPython 3.12.11 arm64 目录。构建保留完整运行时和许可文件；详见 [macOS 构建说明](desktop/macos/README.md)与[运行时许可](desktop/macos/RUNTIME-LICENSES.md)。
 
-公开 Demo 已上线：<https://pifuyuini.github.io/genea/>。无需安装即可体验只读浏览；本地编辑请下载源码包并按上方指引启动。
+## 源码、静态站点与验证
 
-若在自己的仓库部署，进入 **Settings → Pages → Build and deployment**：Source 选 **Deploy from a branch**，Branch 选 **main**，文件夹选 **/docs**，点击 **Save**。
-
-源码包可用以下命令重建：
+`scripts/build_source.py` 按固定白名单构建下载包，只收录应用源码、测试、词库许可和两份文学样例。公开包包含 38＋46 张独立头像、Demo1 既有截图，以及 Demo2 头像的提示词和映射；不包含原始生成矩阵。精简源码包保留旧 Demo1 回归所需的 8 个冻结文件，不包含完整预构建站点；新版静态页由源码重建。GitHub 自带的标签源码包则包含整个公开仓库。
 
 ```sh
-python3 scripts/build_source.py --version v0.1.0-preview.1
+python3 -B scripts/build_source.py --version v0.2.0-preview.1
+python3 -B demo2/build_pages.py
 ```
 
-运行 Python 测试：
+Demo2 构建器写入 `docs/demo2/` 和新增的 `docs/demos/` 演示选择页。**旧 `docs/` 已冻结。** Demo1 生成器使用包内原字节冻结的 HTML/CSS/JS，仅支持通过 `--output-dir` 指定独立预览目录；它拒绝写入 `docs/` 及其子目录。新版构建不会覆盖旧 Demo1，旧版预览构建也不会覆盖 Demo2。
+
+精简源码包不含预构建页面，先运行 `python3 -B demo2/build_pages.py`，再运行 Python 测试：
 
 ```sh
-python3 -B -m unittest discover -s tests -p 'test_*.py'
+TEST_DIR="tmp/$(date +%Y%m%d-%H%M%S)-tests"
+mkdir -p "$TEST_DIR"
+touch "$TEST_DIR/.codex-tmp"
+GENEA_QA_DIR="$PWD/$TEST_DIR" GENEA_TEST_TMP="$PWD/$TEST_DIR" TMPDIR="$PWD/$TEST_DIR" \
+  python3 -B -m unittest discover -s tests -p 'test_*.py'
 ```
 
-macOS 可使用系统 JavaScriptCore 运行每个 `tests/test_*.js`（从仓库根目录执行）：
+macOS 的 JavaScript 测试使用系统 JavaScriptCore。`test_demo2_query.js` 的期望响应由 `test_pages_demo2.py` 提供，不单独执行；`test_motion.js` 需预载 `static/motion.js`。发布工作流提供完整执行命令。发布工作流分别测试和构建源码包、macOS App；两项成功后才创建新的预览 Release，不会覆盖既有 Release。
 
-```sh
-for test in tests/test_*.js; do
-  /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc "$test" || break
-done
-```
-
-首次公开发布的范围与验证记录见 [发布验收记录](PUBLICATION.md)。本仓库从独立的公开历史开始，发布内容只含应用源码与文学演示素材。
+中文亲属词库来源及完整 MIT 许可保存在 `resources/kinship/`。Genea 自身目前未指定开源许可证。发布范围与本次验证记录见 [PUBLICATION.md](PUBLICATION.md)。

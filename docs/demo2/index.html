@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Genea · 百年孤独 Demo2</title>
+    <meta name="description" content="百年孤独七代家谱：46 人、原创头像与新版实验功能。公开只读，不保存修改。" />
+    <meta name="theme-color" content="#f4f0e8" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23b83a26'/%3E%3Cpath d='M32 23v7M20 41v-3a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4v3' fill='none' stroke='%23fffaf5' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cg fill='%23fffaf5'%3E%3Ccircle cx='32' cy='18' r='6.5'/%3E%3Ccircle cx='20' cy='46' r='6.5'/%3E%3Ccircle cx='44' cy='46' r='6.5'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./readonly.css" />
+  </head>
+  <body data-readonly="true" data-theme="latte" data-mode="select">
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.4-4.4" /></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6.5 5.5 5.5-5.5 5.5" /></symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" /></symbol>
+      <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" /></symbol>
+      <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 17 17 7M8.5 7H17v8.5" /></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></symbol>
+      <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" /><rect x="8.5" y="8.5" width="7" height="7" rx="1.6" /></symbol>
+      <symbol id="i-focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.2" /><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5" /></symbol>
+      <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15M5.8 8.5h1.4M5.8 11.5h1.4" /></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M9.7 9.4a2.4 2.4 0 0 1 4.6.9c0 1.6-2.3 2.1-2.3 3.5" /><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none" /></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.8" /><path d="M12 2.8v2.1M12 19.1v2.1M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5" /></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.8 14.6A8.2 8.2 0 0 1 9.4 4.2a8.2 8.2 0 1 0 10.4 10.4Z" /></symbol>
+      <symbol id="i-pointer" viewBox="0 0 24 24"><path d="m5.5 4.5 13 5-5.6 2.1-2.1 5.9Z" /><path d="m13.2 13.2 5 5" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13.5a4 4 0 0 0 6 .4l3-3a4 4 0 0 0-5.7-5.7l-1.6 1.6" /><path d="M14 10.5a4 4 0 0 0-6-.4l-3 3a4 4 0 0 0 5.7 5.7l1.6-1.6" /></symbol>
+      <symbol id="i-kin" viewBox="0 0 24 24"><circle cx="6.5" cy="6.5" r="2.6" /><circle cx="17.5" cy="17.5" r="2.6" /><path d="M9.1 6.5h5.4a3 3 0 0 1 3 3v5.4" /><path d="M6.5 9.1v5.4a3 3 0 0 0 3 3h5.4" stroke-dasharray="2 2.6" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M10 11v6M14 11v6M6.5 7l.8 11.3A2 2 0 0 0 9.3 20h5.4a2 2 0 0 0 2-1.7L17.5 7M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2" /></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.8A2.3 2.3 0 0 1 6.3 6.5h1.5L9.2 4.5h5.6l1.4 2h1.5A2.3 2.3 0 0 1 20 8.8v8.4a2.3 2.3 0 0 1-2.3 2.3H6.3A2.3 2.3 0 0 1 4 17.2Z" /><circle cx="12" cy="12.8" r="3.4" /></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h15M16 5l3 3-3 3M20 16H5M8 13l-3 3 3 3" /></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2.4" /><path d="M15.5 8.5V6.4A2.4 2.4 0 0 0 13.1 4H6.4A2.4 2.4 0 0 0 4 6.4v6.7a2.4 2.4 0 0 0 2.4 2.4h2.1" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.3 3 17.1A2 2 0 0 0 4.7 20h14.6a2 2 0 0 0 1.7-2.9L13.7 4.3a2 2 0 0 0-3.4 0Z" /><path d="M12 9.5V13" /><circle cx="12" cy="16.6" r=".6" fill="currentColor" stroke="none" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5" /><circle cx="12" cy="7.9" r=".6" fill="currentColor" stroke="none" /></symbol>
+      <symbol id="i-tree" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="5" rx="1.5" /><rect x="3" y="15.5" width="6" height="5" rx="1.5" /><rect x="15" y="15.5" width="6" height="5" rx="1.5" /><path d="M12 8.5V12M6 15.5V14a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1.5" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0" /><path d="M15.5 5.5a3.2 3.2 0 0 1 0 6.1M17.5 14.4a5.5 5.5 0 0 1 3 5.1" /></symbol>
+      <symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="10" cy="8.5" r="3.4" /><path d="M3.5 19.5a6.5 6.5 0 0 1 11.2-4.5" /><path d="M18.5 13.5v6M15.5 16.5h6" /></symbol>
+      <symbol id="i-layers-plus" viewBox="0 0 24 24"><path d="m12 3.5 8 4.4-8 4.4-8-4.4Z" /><path d="m4 12.3 8 4.4 2.2-1.2" /><path d="M18.5 14v6M15.5 17h6" /></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M13.5 6.5 17.5 10.5" /><path d="M4.5 19.5 5.3 15.6 15.6 5.3a2.1 2.1 0 0 1 3 3L8.3 18.6Z" /></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4.5 3.8 6.6v13L9 17.5l6 2 5.2-2.1v-13L15 6.5Z" /><path d="M9 4.5v13M15 6.5v13" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 5.5 6v5.3c0 4.2 2.7 7.4 6.5 8.9 3.8-1.5 6.5-4.7 6.5-8.9V6Z" /><path d="m9.2 12 2 2 3.8-4" /></symbol>
+      <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5 12 12" /><path d="M18 13.5v3.8a2.2 2.2 0 0 1-2.2 2.2H6.7a2.2 2.2 0 0 1-2.2-2.2V8.2A2.2 2.2 0 0 1 6.7 6h3.8" /></symbol>
+      <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9.2 3.5h5.6M10.4 3.5v5.4l-4.9 8.6a2 2 0 0 0 1.7 3h9.6a2 2 0 0 0 1.7-3l-4.9-8.6V3.5" /><path d="M7.7 14.5h8.6" /></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M6 4.8h12a2.6 2.6 0 0 1 2.6 2.6v6.9a2.6 2.6 0 0 1-2.6 2.6h-6.6l-4.6 3.4v-3.4H6a2.6 2.6 0 0 1-2.6-2.6V7.4A2.6 2.6 0 0 1 6 4.8Z" /><path d="M8 9.6h8M8 12.8h5" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5M12 14.2v2.2" /></symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="m8.4 12.3 2.5 2.5 4.7-5" /></symbol>
+      <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6.5" cy="5.5" r="2.3" /><circle cx="6.5" cy="18.5" r="2.3" /><path d="M8.8 5.5h7.2a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H8.8" stroke-dasharray="2.4 2.4" /></symbol>
+    </svg>
+
+    <div class="app-shell">
+      <aside id="workspace-sidebar" class="workspace-sidebar" aria-label="家谱导航">
+        <div class="sidebar-inner">
+          <div class="brand" aria-label="Genea 家族图册">
+            <span class="brand-seal" aria-hidden="true">谱</span>
+            <div class="brand-text"><h1>Genea</h1><p>家族图册</p></div>
+          </div>
+
+          <button id="workspace-overview" class="overview-card" type="button" aria-label="查看全部代际">
+            <span class="overview-icon" aria-hidden="true"><svg class="icon"><use href="#i-tree" /></svg></span>
+            <span class="overview-copy"><strong>全部代际</strong><small>全览完整家谱</small></span>
+            <svg class="icon overview-arrow" aria-hidden="true"><use href="#i-arrow-up-right" /></svg>
+          </button>
+
+          <dl class="workspace-stats" aria-label="家谱概况">
+            <div class="workspace-stat"><dt>人物</dt><dd id="workspace-people-count">—</dd></div>
+            <div class="workspace-stat"><dt>代际</dt><dd id="workspace-generation-count">—</dd></div>
+            <div class="workspace-stat"><dt>关系</dt><dd id="workspace-relationship-count">—</dd></div>
+          </dl>
+
+          <button id="check-genealogy" type="button" class="sidebar-tool" hidden>
+            <span class="sidebar-tool-icon" aria-hidden="true"><svg class="icon"><use href="#i-shield" /></svg></span>
+            <span class="sidebar-tool-copy"><strong>检查家谱</strong><small>核对结构与资料</small></span>
+            <span class="lab-tag" aria-hidden="true">实验</span>
+          </button>
+
+          <section class="sidebar-section" aria-labelledby="generation-navigation-title">
+            <h2 id="generation-navigation-title" class="sidebar-heading">代际目录</h2>
+            <nav id="generation-navigation" class="generation-navigation" aria-label="按代际定位"></nav>
+          </section>
+
+          <section class="sidebar-section sidebar-legend" aria-labelledby="canvas-legend-title">
+            <h2 id="canvas-legend-title" class="sidebar-heading">连线图例</h2>
+            <ul class="canvas-legend" aria-label="关系连线图例">
+              <li data-kind="father_son">父子</li>
+              <li data-kind="father_daughter">父女</li>
+              <li data-kind="mother_son">母子</li>
+              <li data-kind="mother_daughter">母女</li>
+              <li data-kind="special">特殊关系</li>
+            </ul>
+            <p id="cross-generation-status" class="legend-note" role="status" hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-route" /></svg>
+              <span><strong>跨代连线 · 实验</strong>跨行的亲子线沿右侧通道绕行</span>
+            </p>
+          </section>
+
+          <footer class="sidebar-footer">
+            <svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
+            <span>公开文学演示 · 不保存修改</span>
+          </footer>
+        </div>
+      </aside>
+
+      <header class="app-bar">
+        <div class="workspace-heading">
+          <button id="workspace-sidebar-toggle" type="button" class="icon-button" aria-label="切换代际目录" aria-controls="workspace-sidebar" aria-expanded="true" data-tooltip="代际目录" data-tooltip-side="bottom" data-tooltip-align="start">
+            <svg class="icon" aria-hidden="true"><use href="#i-sidebar" /></svg>
+          </button>
+          <div class="workspace-title">
+            <h2 id="workspace-name">百年孤独 · Demo2</h2>
+            <span id="workspace-save-state" class="save-state" data-state="loading" role="status">正在载入</span>
+          </div>
+        </div>
+
+        <div class="person-search">
+          <svg class="icon search-icon" aria-hidden="true"><use href="#i-search" /></svg>
+          <input
+            id="person-search-input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            enterkeyhint="search"
+            placeholder="搜索人物"
+            aria-label="搜索人物"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-controls="search-results"
+            aria-activedescendant=""
+            aria-expanded="false"
+          />
+          <button id="search-clear" type="button" class="search-clear" aria-label="清空搜索">
+            <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+          <kbd class="search-shortcut" aria-hidden="true">⌘K</kbd>
+          <div id="search-results" class="search-results" role="listbox" aria-label="搜索结果" hidden></div>
+        </div>
+
+        <nav class="mode-switcher" aria-label="工作模式">
+          <button id="select-mode" type="button" aria-pressed="true" data-tooltip="编辑 · V" data-tooltip-side="bottom">
+            <svg class="icon" aria-hidden="true"><use href="#i-pointer" /></svg>
+            <span id="select-mode-label" class="mode-label">编辑</span>
+          </button>
+          <button id="link-mode" type="button" aria-pressed="false" data-tooltip="连线 · L" data-tooltip-side="bottom" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-link" /></svg>
+            <span class="mode-label">连线</span>
+          </button>
+          <button id="perspective-mode" type="button" aria-pressed="false" data-tooltip="关系 · R" data-tooltip-side="bottom" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-kin" /></svg>
+            <span class="mode-label">关系</span>
+          </button>
+        </nav>
+
+        <div class="header-actions">
+          <a class="button demo-route" href="../demos/">演示目录</a>
+          <div class="generation-menu-wrap">
+            <button id="generation-menu-toggle" type="button" class="primary-button" aria-controls="generation-menu" aria-haspopup="menu" aria-expanded="false" hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-layers-plus" /></svg>
+              <span class="button-label">添加代际</span>
+            </button>
+            <div id="generation-menu" class="action-popover" role="menu" aria-labelledby="generation-menu-toggle" hidden>
+              <button id="add-generation-above" type="button" role="menuitem" hidden>
+                <span class="menu-icon" aria-hidden="true"><svg class="icon"><use href="#i-arrow-up" /></svg></span>
+                <span class="menu-copy"><strong>增加上一代</strong><small>放在最上方，记录更早的祖辈</small></span>
+              </button>
+              <button id="add-generation-below" type="button" role="menuitem" hidden>
+                <span class="menu-icon" aria-hidden="true"><svg class="icon"><use href="#i-arrow-down" /></svg></span>
+                <span class="menu-copy"><strong>增加下一代</strong><small>放在最下方，记录新的后辈</small></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="labs-menu-wrap">
+            <button id="labs-toggle" type="button" class="labs-toggle" data-state="off" aria-label="实验功能：未启用" aria-controls="labs-popover" aria-expanded="false" data-tooltip="实验功能" data-tooltip-side="bottom">
+              <svg class="icon" aria-hidden="true"><use href="#i-flask" /></svg>
+              <span class="labs-label">实验</span>
+              <span class="labs-dot" aria-hidden="true"></span>
+            </button>
+            <section id="labs-popover" class="labs-popover" aria-labelledby="labs-title" hidden>
+              <header class="labs-header">
+                <span class="labs-header-icon" aria-hidden="true"><svg class="icon"><use href="#i-flask" /></svg></span>
+                <div class="labs-heading">
+                  <p class="eyebrow">实验室</p>
+                  <h2 id="labs-title">实验性功能</h2>
+                </div>
+                <button id="experiments-toggle" type="button" class="experiments-toggle" aria-pressed="false" aria-labelledby="experiments-toggle-label" aria-describedby="experiments-status" disabled>
+                  <span class="experiments-switch" aria-hidden="true"></span>
+                  <span id="experiments-toggle-label" class="visually-hidden">启用实验性功能</span>
+                </button>
+              </header>
+              <p id="experiments-status" class="experiments-status">当前使用普通模式</p>
+              <ul class="labs-features" aria-label="实验功能包含">
+                <li><span class="labs-feature-icon" aria-hidden="true"><svg class="icon"><use href="#i-kin" /></svg></span><span class="labs-feature-copy"><strong>亲戚称呼</strong><small>关系模式中给出日常称呼，并保留原关系链与依据</small></span></li>
+                <li><span class="labs-feature-icon" aria-hidden="true"><svg class="icon"><use href="#i-route" /></svg></span><span class="labs-feature-copy"><strong>跨代连线</strong><small>展示已登记的跨代关系；长线沿右侧通道绕行，演示不能编辑</small></span></li>
+                <li><span class="labs-feature-icon" aria-hidden="true"><svg class="icon"><use href="#i-chat" /></svg></span><span class="labs-feature-copy"><strong>一句话查询</strong><small>在「关系」模式里问“某人的子女有哪些”</small></span></li>
+                <li><span class="labs-feature-icon" aria-hidden="true"><svg class="icon"><use href="#i-shield" /></svg></span><span class="labs-feature-copy"><strong>检查家谱</strong><small>展示这份演示数据的检查报告，可定位提醒；不执行修复</small></span><button id="labs-run-check" type="button" class="button is-small">检查</button></li>
+              </ul>
+              <p class="labs-footnote"><svg class="icon" aria-hidden="true"><use href="#i-info" /></svg>开关仅影响本次浏览，刷新后恢复开启。公开演示不能编辑、保存或修复。</p>
+            </section>
+          </div>
+
+          <div class="help-menu-wrap">
+            <button id="help-toggle" type="button" class="icon-button" aria-label="使用指南" aria-controls="help-popover" aria-expanded="false" data-tooltip="使用指南 · ?" data-tooltip-side="bottom">
+              <svg class="icon" aria-hidden="true"><use href="#i-help" /></svg>
+            </button>
+            <section id="help-popover" class="help-popover" aria-label="使用指南" hidden>
+              <header class="help-header">
+                <p class="eyebrow">快速上手</p>
+                <h2>浏览百年孤独示例家谱</h2>
+                <p id="help-cross-generation" class="help-experimental" hidden><span class="lab-tag">实验</span> 此示例展示七代家谱与已登记的跨代关系，画布行距不参与称谓推导。「关系」模式可查看亲戚称呼并用一句话查询；侧栏可查看检查报告。公开演示仅可查看。</p>
+              </header>
+              <div class="help-grid">
+                <section>
+                  <h3>人物与关系</h3>
+                  <dl>
+                    <div><dt>打开人物档案</dt><dd>点选人物</dd></div>
+                    <div hidden><dt>排序或调整代际</dt><dd>拖动人物</dd></div>
+                    <div hidden><dt>建立亲子关系</dt><dd><kbd>Shift</kbd><span id="help-link-target"> + 拖到相邻代</span></dd></div>
+                    <div><dt>查看亲属称谓</dt><dd>悬停人物或连线</dd></div>
+                  </dl>
+                </section>
+                <section>
+                  <h3>画布</h3>
+                  <dl>
+                    <div><dt>移动画布</dt><dd>拖动空白处</dd></div>
+                    <div><dt>从人物处移动</dt><dd>按住 <kbd>空格</kbd> 拖动</dd></div>
+                    <div><dt>缩放</dt><dd>滚轮 · <kbd>+</kbd> <kbd>−</kbd> · 双击空白处</dd></div>
+                    <div><dt>全览 / 100%</dt><dd><kbd>F</kbd> · <kbd>0</kbd></dd></div>
+                    <div><dt>缩略导航</dt><dd>点击 · 拖动 · 方向键</dd></div>
+                  </dl>
+                </section>
+                <section>
+                  <h3>键盘</h3>
+                  <dl>
+                    <div><dt>搜索人物</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>K</kbd> · <kbd>/</kbd></dd></div>
+                    <div hidden><dt>撤销</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Z</kbd></dd></div>
+                    <div hidden><dt>重做</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>⇧</kbd><kbd>Z</kbd></dd></div>
+                    <div><dt>查看 / 关系</dt><dd><kbd>V</kbd> <kbd>R</kbd></dd></div>
+                    <div hidden><dt>保存人物档案</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>↵</kbd></dd></div>
+                  </dl>
+                </section>
+              </div>
+              <p class="help-note"><svg class="icon" aria-hidden="true"><use href="#i-kin" /></svg>在「关系」模式依次点选 A 与 B，即可查看「B 是 A 的什么人」并复制原登记关系链。</p>
+            </section>
+          </div>
+
+          <button id="theme-toggle" type="button" class="icon-button theme-toggle" aria-label="切换到深色外观" data-tooltip="切换外观" data-tooltip-side="bottom" data-tooltip-align="end">
+            <svg class="icon theme-icon-dark" aria-hidden="true"><use href="#i-moon" /></svg>
+            <svg class="icon theme-icon-light" aria-hidden="true"><use href="#i-sun" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="board-shell">
+        <section id="generation-board" class="generation-board" aria-label="家谱画布">
+          <div class="canvas-grid" aria-hidden="true"></div>
+
+          <div class="canvas-banners">
+            <div id="config-error" class="canvas-banner is-danger" role="alert" hidden>
+              <span class="canvas-banner-icon" aria-hidden="true"><svg class="icon"><use href="#i-alert" /></svg></span>
+              <p class="canvas-banner-copy"><strong>暂时无法确认实验功能设置</strong><span id="config-error-message"></span></p>
+              <button id="config-retry" type="button" class="button is-small">重新读取设置</button>
+            </div>
+            <div id="workspace-read-only" class="canvas-banner is-readonly" role="status" hidden>
+              <span class="canvas-banner-icon" aria-hidden="true"><svg class="icon"><use href="#i-lock" /></svg></span>
+              <p class="canvas-banner-copy"><strong>Demo2 · 公开只读演示</strong><span id="workspace-read-only-reason"></span></p>
+              <button id="read-only-enable" type="button" class="button is-small">重新启用实验功能</button>
+            </div>
+          </div>
+
+          <div class="camera-controls" role="group" aria-label="画布视图">
+            <button id="history-undo" class="history-button" type="button" aria-label="撤销" aria-keyshortcuts="Meta+Z Control+Z" data-tooltip="暂无可撤销的操作" data-tooltip-align="start" disabled>
+              <svg class="icon" aria-hidden="true"><use href="#i-undo" /></svg>
+            </button>
+            <button id="history-redo" class="history-button" type="button" aria-label="重做" aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z Control+Y" data-tooltip="暂无可重做的操作" data-tooltip-align="start" disabled>
+              <svg class="icon" aria-hidden="true"><use href="#i-redo" /></svg>
+            </button>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <button id="camera-zoom-out" type="button" aria-label="缩小画布" data-tooltip="缩小 · −">
+              <svg class="icon" aria-hidden="true"><use href="#i-minus" /></svg>
+            </button>
+            <button id="camera-zoom-level" type="button" class="zoom-level" aria-label="恢复到百分之百并保持视野中心" data-tooltip="恢复 100% · 0">100%</button>
+            <button id="camera-zoom-in" type="button" aria-label="放大画布" data-tooltip="放大 · +">
+              <svg class="icon" aria-hidden="true"><use href="#i-plus" /></svg>
+            </button>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <button id="camera-fit" type="button" aria-label="适配全部内容" data-tooltip="全览 · F">
+              <svg class="icon" aria-hidden="true"><use href="#i-fit" /></svg>
+            </button>
+            <button id="camera-focus" type="button" aria-label="聚焦当前人物" data-tooltip="聚焦当前人物">
+              <svg class="icon" aria-hidden="true"><use href="#i-focus" /></svg>
+            </button>
+          </div>
+
+          <section id="canvas-navigator" class="canvas-navigator" aria-label="画布缩略导航">
+            <div class="navigator-header">
+              <span class="navigator-title"><svg class="icon" aria-hidden="true"><use href="#i-map" /></svg>家谱全貌</span>
+              <button id="navigator-toggle" type="button" class="text-button" aria-expanded="true" aria-controls="navigator-content" aria-label="收起缩略导航"><span id="navigator-toggle-label">收起</span></button>
+            </div>
+            <div id="navigator-content">
+              <svg id="navigator-map" viewBox="0 0 200 120" tabindex="0" role="group" aria-label="家谱缩略导航，点击定位，拖动视口，方向键移动视野" aria-describedby="navigator-hint">
+                <g id="navigator-edges" aria-hidden="true"></g>
+                <g id="navigator-people" aria-hidden="true"></g>
+                <rect id="navigator-viewport" x="0" y="0" width="0" height="0" rx="3" aria-hidden="true"></rect>
+              </svg>
+              <span id="navigator-empty" hidden>添加人物后显示全貌</span>
+              <p id="navigator-hint">点击定位 · 拖动视口 · 方向键移动</p>
+            </div>
+          </section>
+
+          <div class="canvas-skeleton" aria-hidden="true">
+            <div class="skeleton-lane"><span></span><span></span><span></span></div>
+            <div class="skeleton-lane"><span></span><span></span><span></span><span></span></div>
+            <div class="skeleton-lane"><span></span><span></span><span></span><span></span><span></span></div>
+          </div>
+
+          <div id="canvas-stage" class="canvas-stage">
+            <svg id="relationship-layer" class="relationship-layer" aria-label="人物关系连线"></svg>
+            <div id="generation-lanes"></div>
+          </div>
+
+          <div class="empty-state" hidden>
+            <svg class="empty-illustration" viewBox="0 0 280 160" aria-hidden="true">
+              <path class="empty-edge" pathLength="1" d="M140 44v18a8 8 0 0 1-8 8H78a8 8 0 0 0-8 8v14" style="--edge: var(--edge-father_son)" />
+              <path class="empty-edge" pathLength="1" d="M140 44v18a8 8 0 0 0 8 8h54a8 8 0 0 1 8 8v14" style="--edge: var(--edge-father_daughter)" />
+              <path class="empty-edge is-dashed" d="M210 124v8a6 6 0 0 1-6 6h-22a6 6 0 0 0-6 6v4" style="--edge: var(--edge-special)" />
+              <rect class="empty-card" x="112" y="6" width="56" height="38" rx="10" />
+              <circle class="empty-avatar" cx="140" cy="22" r="8" />
+              <rect class="empty-line" x="126" y="34" width="28" height="4" rx="2" />
+              <rect class="empty-card" x="42" y="92" width="56" height="38" rx="10" />
+              <circle class="empty-avatar is-male" cx="70" cy="108" r="8" />
+              <rect class="empty-line" x="56" y="120" width="28" height="4" rx="2" />
+              <rect class="empty-card" x="182" y="92" width="56" height="38" rx="10" />
+              <circle class="empty-avatar is-female" cx="210" cy="108" r="8" />
+              <rect class="empty-line" x="196" y="120" width="28" height="4" rx="2" />
+              <rect class="empty-card is-ghost" x="148" y="148" width="56" height="12" rx="6" />
+            </svg>
+            <p class="eyebrow">一段家族故事，从这里开始</p>
+            <h2>建立你的第一代</h2>
+            <p class="empty-lead">Genea 以「代」为行整理家谱：先建立一代，再添加人物，最后用连线记下他们之间的亲子关系。</p>
+            <ol class="empty-steps">
+              <li><span class="step-index">1</span><strong>建立代际</strong><small>例如「祖辈」「父辈」</small></li>
+              <li><span class="step-index">2</span><strong>添加人物</strong><small>姓名、性别与照片</small></li>
+              <li><span class="step-index">3</span><strong>连接关系</strong><small>在档案中关联父母子女</small></li>
+            </ol>
+            <button id="add-first-generation" type="button" class="primary-button is-large">
+              <svg class="icon" aria-hidden="true"><use href="#i-plus" /></svg>
+              添加第 1 代
+            </button>
+          </div>
+
+          <div id="load-error" class="load-error" role="alert" hidden>
+            <span class="load-error-icon" aria-hidden="true"><svg class="icon"><use href="#i-alert" /></svg></span>
+            <h2>暂时无法载入家谱</h2>
+            <p>请确认 Genea 服务仍在运行，然后重试。已保存的资料不会受影响。</p>
+            <button id="retry-load" type="button" class="button">重新载入</button>
+          </div>
+
+          <p class="canvas-hint">点选查看资料 · 拖动人物排序或换代 · 按住空格平移</p>
+        </section>
+      </main>
+
+      <section id="selection-tray" class="selection-tray" aria-label="关系视角选择" hidden>
+        <header class="tray-header">
+          <div class="tray-title">
+            <p class="eyebrow">关系视角</p>
+            <p id="selection-status" class="selection-status" role="status"></p>
+          </div>
+          <button id="exit-perspective" type="button" class="icon-button" aria-label="退出关系视角" data-tooltip="退出 · Esc" data-tooltip-align="end">
+            <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </header>
+        <section id="advanced-query" class="advanced-query" hidden>
+          <div class="tray-tabs" role="tablist" aria-label="查询方式">
+            <button id="advanced-query-pick" type="button" role="tab" class="tray-tab" aria-selected="true" aria-controls="selection-result">
+              <svg class="icon" aria-hidden="true"><use href="#i-kin" /></svg><span>点选两人</span>
+            </button>
+            <button id="advanced-query-toggle" type="button" role="tab" class="tray-tab" aria-selected="false" aria-expanded="false" aria-controls="advanced-query-panel">
+              <svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg><span>一句话查询</span><span class="lab-tag" aria-hidden="true">实验</span>
+            </button>
+          </div>
+          <div id="advanced-query-panel" role="tabpanel" aria-labelledby="advanced-query-toggle" hidden>
+            <form id="advanced-query-form" class="advanced-query-form">
+              <label class="query-field">
+                <svg class="icon" aria-hidden="true"><use href="#i-search" /></svg>
+                <span class="visually-hidden">用一句话查询亲属关系</span>
+                <input id="advanced-query-input" type="search" autocomplete="off" enterkeyhint="search" maxlength="500" placeholder="例如：某人的子女有哪些" />
+              </label>
+              <button id="advanced-query-submit" type="submit" class="primary-button">查询</button>
+            </form>
+            <div class="query-examples" aria-label="查询示例">
+              <span>试试</span>
+              <button type="button" class="query-chip" data-query-example="pair">两人是什么关系</button>
+              <button type="button" class="query-chip" data-query-example="children">某人的子女</button>
+              <button type="button" class="query-chip" data-query-example="siblings">某人的兄弟姐妹</button>
+            </div>
+            <p id="advanced-query-status" class="tool-status" role="status"></p>
+            <div id="advanced-query-results" class="advanced-query-results"></div>
+          </div>
+        </section>
+        <div class="tray-slots">
+          <div class="selection-slot slot-a">
+            <button id="selection-a" type="button" class="selection-chip" aria-pressed="true">A：未选择</button>
+            <button id="clear-selection-a" type="button" class="selection-clear" aria-label="清空 A 选者" hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+            </button>
+          </div>
+          <button id="swap-selection" type="button" class="icon-button swap-button" aria-label="交换 A / B" data-tooltip="交换 A / B">
+            <svg class="icon" aria-hidden="true"><use href="#i-swap" /></svg>
+          </button>
+          <div class="selection-slot slot-b">
+            <button id="selection-b" type="button" class="selection-chip" aria-pressed="false">B：未选择</button>
+            <button id="clear-selection-b" type="button" class="selection-clear" aria-label="清空 B 选者" hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+            </button>
+          </div>
+        </div>
+        <div id="selection-result" class="selection-result" data-state="empty" aria-live="polite"></div>
+        <button id="export-relationship" type="button" class="primary-button" aria-label="复制关系">复制关系</button>
+      </section>
+    </div>
+
+    <dialog id="check-dialog" class="modal check-modal" aria-labelledby="check-title" aria-describedby="check-status">
+      <div class="modal-card check-card">
+        <header class="modal-header">
+          <span class="modal-icon" aria-hidden="true"><svg class="icon"><use href="#i-shield" /></svg></span>
+          <div><p class="eyebrow">实验性功能</p><h2 id="check-title">检查家谱</h2></div>
+          <button id="check-close" class="icon-button" type="button" aria-label="关闭家谱检查"><svg class="icon" aria-hidden="true"><use href="#i-close" /></svg></button>
+        </header>
+        <div class="check-body">
+          <p class="check-intro">这是公开演示数据的预计算检查报告。可定位人物与关系供你核对；这里不能编辑资料或执行修复。</p>
+          <p id="check-status" class="tool-status" role="status"></p>
+          <div id="check-summary" class="check-summary" hidden></div>
+          <div id="check-results" class="check-results"></div>
+        </div>
+        <footer class="check-footer">
+          <span class="check-footer-note"><svg class="icon" aria-hidden="true"><use href="#i-info" /></svg>检查本身不会写入文件或撤销历史</span>
+          <button id="check-refresh" class="button" type="button"><svg class="icon" aria-hidden="true"><use href="#i-redo" /></svg>重新载入报告</button>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog id="generation-dialog" class="modal" aria-labelledby="generation-dialog-title">
+      <form id="generation-form" class="modal-card">
+        <header class="modal-header">
+          <span class="modal-icon" aria-hidden="true"><svg class="icon"><use href="#i-layers-plus" /></svg></span>
+          <div><p class="eyebrow">代际</p><h2 id="generation-dialog-title">添加代际</h2></div>
+        </header>
+        <label class="field">
+          <span class="field-label">名称 <span class="optional">可选</span></span>
+          <input id="generation-name" autocomplete="off" placeholder="例如：祖辈" maxlength="40" />
+        </label>
+        <div class="name-suggestions" role="group" aria-label="常用代际名称">
+          <button type="button" data-generation-name="高祖辈">高祖辈</button>
+          <button type="button" data-generation-name="曾祖辈">曾祖辈</button>
+          <button type="button" data-generation-name="祖辈">祖辈</button>
+          <button type="button" data-generation-name="父辈">父辈</button>
+          <button type="button" data-generation-name="同辈">同辈</button>
+          <button type="button" data-generation-name="子辈">子辈</button>
+          <button type="button" data-generation-name="孙辈">孙辈</button>
+        </div>
+        <p class="field-hint">留空将自动命名为「第 N 层」，之后可随时点击代际名称修改。</p>
+        <div class="dialog-actions">
+          <button id="generation-cancel" type="button" class="button">取消</button>
+          <button id="generation-submit" type="submit" class="primary-button">创建代际</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="modal" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <div class="modal-card confirm-card">
+        <span class="modal-icon confirm-icon" aria-hidden="true"><svg class="icon"><use href="#i-alert" /></svg></span>
+        <div class="confirm-copy">
+          <h2 id="confirm-title">请确认</h2>
+          <p id="confirm-message"></p>
+        </div>
+        <div class="dialog-actions">
+          <button id="confirm-cancel" type="button" class="button">取消</button>
+          <button id="confirm-accept" type="button" class="primary-button">确认</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="person-dialog" class="person-inspector" aria-labelledby="person-dialog-title">
+      <form id="person-form" class="inspector-card" tabindex="-1">
+        <header class="inspector-header">
+          <p class="eyebrow">人物档案</p>
+          <button type="button" class="icon-button" data-close-dialog="person-dialog" aria-label="关闭人物档案" data-tooltip="关闭 · Esc" data-tooltip-side="bottom" data-tooltip-align="end">
+            <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </header>
+        <div class="inspector-content">
+          <section class="profile-hero" aria-label="人物照片">
+            <label class="photo-picker" tabindex="0" role="button" aria-label="选择人物照片，也可以把图片拖到这里">
+              <span id="person-photo-preview" class="profile-avatar" aria-hidden="true"></span>
+              <span class="photo-overlay" aria-hidden="true"><svg class="icon"><use href="#i-camera" /></svg></span>
+              <input id="person-photo" class="visually-hidden" aria-hidden="true" type="file" accept="image/png,image/jpeg,image/gif,image/webp" tabindex="-1" />
+            </label>
+            <div class="profile-identity">
+              <h2 id="person-dialog-title">添加人物</h2>
+              <p id="person-profile-context" class="profile-context"></p>
+              <div class="photo-actions">
+                <label for="person-photo" class="text-button"><svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg><span id="person-photo-label">添加照片</span></label>
+                <button id="person-photo-remove" class="text-button is-quiet" type="button" hidden>移除</button>
+              </div>
+            </div>
+          </section>
+          <p class="field-hint photo-hint">JPG、PNG、GIF 或 WebP，8 MB 以内<span class="drop-hint"> · 可直接拖到头像上</span></p>
+          <p id="person-photo-readonly" class="field-hint photo-readonly-note" hidden>照片仅供查看。重新启用实验性功能后可更换。</p>
+
+          <div class="inspector-fields">
+            <label class="field">
+              <span class="field-label">姓名</span>
+              <input id="person-name" required autocomplete="off" placeholder="填写姓名" maxlength="60" />
+            </label>
+            <div class="field-pair">
+              <fieldset class="field">
+                <legend class="field-label">性别</legend>
+                <div id="person-gender" class="segmented gender-choice">
+                  <label><input type="radio" name="person-gender" value="male" required /><span data-gender="male">男</span></label>
+                  <label><input type="radio" name="person-gender" value="female" /><span data-gender="female">女</span></label>
+                </div>
+              </fieldset>
+              <label class="field">
+                <span class="field-label">所属代际</span>
+                <select id="person-generation" required></select>
+              </label>
+            </div>
+            <p id="person-generation-warning" class="inline-notice" hidden></p>
+            <label class="field">
+              <span class="field-label">简介 <span class="optional">可选</span></span>
+              <textarea id="person-introduction" rows="4" placeholder="记下关于 TA 的故事…"></textarea>
+            </label>
+          </div>
+
+          <section class="relatives" aria-labelledby="person-relatives-title">
+            <div class="section-heading">
+              <h3 id="person-relatives-title">亲属关系</h3>
+              <span id="person-relatives-count" class="section-count"></span>
+            </div>
+            <div id="person-relatives" class="relatives-list"></div>
+            <div id="person-relative-field" class="relative-add">
+              <label class="relative-picker">
+                <span class="visually-hidden">选择要关联的父母或子女</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-user-plus" /></svg>
+                <select id="person-relative-add"></select>
+              </label>
+              <button id="person-relative-confirm" type="button" class="button" disabled>添加</button>
+            </div>
+          </section>
+        </div>
+        <footer class="inspector-footer">
+          <p id="person-save-status" class="save-status" role="status">尚未保存</p>
+          <div class="inspector-actions">
+            <button id="person-delete" type="button" class="icon-button danger-button" aria-label="删除人物" data-tooltip="删除人物">
+              <svg class="icon" aria-hidden="true"><use href="#i-trash" /></svg>
+            </button>
+            <button id="person-cancel" type="button" class="button" data-close-dialog="person-dialog">取消</button>
+            <button id="person-save" class="primary-button" type="submit" aria-keyshortcuts="Meta+Enter Control+Enter">保存修改</button>
+          </div>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="relationship-dialog" class="modal" aria-labelledby="relationship-dialog-title">
+      <form id="relationship-form" class="modal-card relationship-card">
+        <header class="modal-header">
+          <span class="modal-icon" aria-hidden="true"><svg class="icon"><use href="#i-link" /></svg></span>
+          <div><p class="eyebrow">人物关系</p><h2 id="relationship-dialog-title">编辑关系</h2></div>
+          <button type="button" class="icon-button" data-close-dialog="relationship-dialog" aria-label="关闭关系编辑">
+            <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </header>
+        <div id="relationship-context" class="relationship-context"></div>
+        <fieldset class="field">
+          <legend class="field-label">关系类型</legend>
+          <div id="relationship-kind" class="segmented">
+            <label><input type="radio" name="relationship-kind" value="standard" checked /><span>标准亲子</span></label>
+            <label><input type="radio" name="relationship-kind" value="special" /><span>特殊关系</span></label>
+          </div>
+        </fieldset>
+        <p id="relationship-description" class="relationship-description"></p>
+        <div class="field-pair">
+          <label id="parent-label-field" class="field">
+            <span class="field-label">上代称谓</span>
+            <input id="parent-label" autocomplete="off" placeholder="例如：养父" maxlength="20" />
+          </label>
+          <label id="child-label-field" class="field">
+            <span class="field-label">下代称谓</span>
+            <input id="child-label" autocomplete="off" placeholder="例如：养女" maxlength="20" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button id="relationship-delete" type="button" class="danger-text-button">
+            <svg class="icon" aria-hidden="true"><use href="#i-trash" /></svg>删除关系
+          </button>
+          <span class="dialog-spacer"></span>
+          <button type="button" class="button" data-close-dialog="relationship-dialog">取消</button>
+          <button id="relationship-save" type="submit" class="primary-button">保存关系</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="./query-engine.js" defer></script>
+    <script src="./readonly-api.js" defer></script>
+    <script src="./motion.js" defer></script>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="选择 Genea 公开文学演示：红楼梦旧版与百年孤独新版实验功能。两份演示均为只读。" />
+    <meta name="theme-color" content="#f4f0e8" />
+    <title>Genea · 选择演示</title>
+    <link rel="stylesheet" href="../demo2/styles.css" />
+    <style>
+      body { overflow: auto; min-height: 100vh; }
+      .demo-directory { width: min(920px, 100%); margin: 0 auto; padding: clamp(32px, 7vw, 80px) 24px; }
+      .directory-brand { display: flex; align-items: center; gap: 12px; color: var(--ink); margin-bottom: 44px; }
+      .directory-seal { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 13px; background: var(--accent); color: var(--on-accent, #fffaf5); font-family: var(--font-serif); font-size: 24px; }
+      .directory-brand strong { font-family: var(--font-serif); font-size: 25px; font-weight: 600; }
+      .directory-brand span + span { color: var(--ink-2); }
+      .directory-heading h1 { font-family: var(--font-serif); font-size: clamp(30px, 4vw, 44px); font-weight: 600; letter-spacing: -.03em; margin: 0 0 14px; }
+      .directory-heading p { color: var(--ink-2); line-height: 1.8; max-width: 620px; margin: 0; }
+      .directory-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 32px 0 24px; }
+      .directory-card { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }
+      .directory-card .directory-monogram { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 20px; background: var(--accent-soft); color: var(--accent); font-family: var(--font-serif); font-size: 32px; }
+      .directory-card img { width: 72px; height: 72px; border-radius: 20px; object-fit: cover; }
+      .directory-card .eyebrow { margin: 0; }
+      .directory-card h2 { margin: 0; font-family: var(--font-serif); font-size: 27px; font-weight: 600; }
+      .directory-card p { margin: 0; color: var(--ink-2); line-height: 1.75; }
+      .directory-card a { margin-top: auto; text-decoration: none; }
+      .directory-note { color: var(--ink-3); font-size: 13px; line-height: 1.8; }
+      .directory-note a { color: var(--accent); text-underline-offset: 3px; }
+      @media (max-width: 640px) { .directory-cards { grid-template-columns: 1fr; } .directory-card { padding: 24px; } .directory-brand { margin-bottom: 30px; } }
+    </style>
+  </head>
+  <body data-theme="latte">
+    <main class="demo-directory">
+      <div class="directory-brand"><span class="directory-seal" aria-hidden="true">谱</span><strong>Genea</strong><span>家族图册</span></div>
+      <header class="directory-heading">
+        <h1>从一份家谱开始</h1>
+        <p>选择一份公开文学演示，浏览人物与代际关系。两份演示都只供查看，不保存修改；书中关系包含剧情信息。</p>
+      </header>
+      <div class="directory-cards">
+        <section class="directory-card" aria-labelledby="demo1-title">
+          <span class="directory-monogram" aria-hidden="true">谱</span>
+          <p class="eyebrow">Demo1 · 保留旧版</p>
+          <h2 id="demo1-title">红楼梦</h2>
+          <p>原有公开只读演示。浏览人物档案、完整代际图与逐级关系链，体验旧版界面。</p>
+          <a class="button" href="https://pifuyuini.github.io/genea/">打开旧版 Demo1</a>
+        </section>
+        <section class="directory-card" aria-labelledby="demo2-title">
+          <img src="../demo2/photos/person_founder.jpg" alt="" />
+          <p class="eyebrow">Demo2 · 新版实验</p>
+          <h2 id="demo2-title">百年孤独</h2>
+          <p>七代、46 人与 46 张原创头像。查看跨代关系、亲戚称呼、一句话查询及检查报告；实验开关仅影响当前浏览，编辑和修复需完整版。</p>
+          <a class="primary-button" href="../demo2/">打开新版 Demo2</a>
+        </section>
+      </div>
+      <p class="directory-note">需要编辑自己的家谱？<a href="https://github.com/pifuyuini/genea/releases/tag/v0.2.0-preview.1">下载 Genea 完整版</a>，资料保存在自己的电脑上。</p>
+    </main>
+    <script>
+      const saved = localStorage.getItem("genea-appearance");
+      document.body.dataset.theme = saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "mocha" : "latte");
+    </script>
+  </body>
+</html>

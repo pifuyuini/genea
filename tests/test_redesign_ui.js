@@ -85,7 +85,7 @@ eval(extract("function hideToast(", "function workspaceFrom("));
 eval(extract("function generations()", "async function loadWorkspace("));
 eval(extract("function createPersonNode(", "function openGenerationDialog("));
 eval(extract("function personRelatives(", "function createRelativeItem("));
-eval(extract("function canLinkPeople(", "function markLinkCandidates("));
+eval(extract("function relationshipLinkError(", "function markLinkCandidates("));
 eval(extract("function relationshipRoles(", "function setActiveRelationship("));
 eval(extract("function relationshipPathData(", "function drawRelationships("));
 eval(extract("function relationshipKindKey(", "let relationshipSaving"));
@@ -143,7 +143,8 @@ state.selectionA = "c"; state.selectionB = "f"; state.relationshipCopyText = "�
 state.relationshipPath = { labels: ["养父", "爸爸"] };
 renderSelectionResult(true);
 const result = $("#selection-result");
-assert(result.dataset.state === "ready" && result.children.length === 2, "a ready path renders a lead line and a chain");
+assert(result.dataset.state === "ready" && result.children.some((node) => node.className === "result-lead") &&
+  result.children.some((node) => node.className === "result-chain"), "a ready path retains a lead line and the original chain");
 assert(text(result.children[0]) === "陈父 是 陈孙 的", "the lead names B before A");
 assert(result.children[1].children.map(text).join("|") === "养父|的|爸爸", "chain steps are separated by 的 joiners");
 state.relationshipPathLoading = true;
@@ -187,13 +188,10 @@ state.linkMode = true; press("v"); state.linkMode = false;
 press("l"); press("r");
 state.perspective = true; press("r"); state.perspective = false;
 assert(calls.join(",") === "select,link,perspective,exit-perspective", "mode keys enter and leave modes");
-const existingPeople = state.workspace.people;
-state.workspace.people = {};
 $("#link-mode").hidden = true;
 calls.length = 0;
 press("l"); press("r");
 assert(calls.length === 0, "mode keys wait until people exist");
-state.workspace.people = existingPeople;
 assert(!press("q").defaultPrevented, "unmapped keys keep their default behavior");
 
 // Link mode highlights valid targets on the cards themselves.

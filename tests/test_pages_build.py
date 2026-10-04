@@ -132,6 +132,19 @@ class PagesBuildTests(unittest.TestCase):
         self.assertNotIn('src="readonly-api.js"', original)
         self.assertNotIn('src="/readonly-api.js"', original)
 
+    def test_legacy_preview_uses_the_frozen_ui_instead_of_current_static(self):
+        for name in ("index.html", "styles.css", "motion.js", "app.js", "readonly-api.js", "readonly.css"):
+            self.assertEqual((self.output / name).read_bytes(), (ROOT / "docs" / name).read_bytes())
+
+    def test_default_and_published_output_preserve_both_live_demos(self):
+        names = ("index.html", "app.js", "styles.css", "demo2/index.html")
+        before = {name: (ROOT / "docs" / name).read_bytes() for name in names if (ROOT / "docs" / name).is_file()}
+        for target in (None, ROOT / "docs", ROOT / "docs/demo2"):
+            with self.assertRaises(ValueError):
+                build_pages.build(target)
+        for name, content in before.items():
+            self.assertEqual((ROOT / "docs" / name).read_bytes(), content)
+
     def test_output_contains_no_python_runtime_or_source_workspace(self):
         paths = [path.relative_to(self.output) for path in self.output.rglob("*") if path.is_file()]
         self.assertFalse(any(".runtime" in path.parts or "__pycache__" in path.parts for path in paths))

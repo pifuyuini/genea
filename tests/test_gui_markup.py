@@ -41,6 +41,26 @@ class GuiMarkupTests(unittest.TestCase):
         self.assertEqual(self.by_id["workspace-save-state"][1]["role"], "status")
         self.assertIn("hidden", self.by_id["help-popover"][1])
 
+    def test_experimental_mode_has_an_accessible_initially_hidden_marker(self):
+        _, marker = self.by_id["cross-generation-status"]
+        self.assertEqual(marker["role"], "status")
+        self.assertIn("hidden", marker)
+        self.assertIn("hidden", self.by_id["help-cross-generation"][1])
+        self.assertIn("help-link-target", self.by_id)
+        self.assertIn("跨代连线 · 实验", (ROOT / "static/index.html").read_text())
+
+    def test_experimental_tools_are_accessible_and_separate_from_edit_forms(self):
+        for identifier in ("experiments-toggle", "check-genealogy", "config-retry", "advanced-query-toggle", "check-refresh", "check-close"):
+            tag, attrs = self.by_id[identifier]
+            self.assertEqual((tag, attrs["type"]), ("button", "button"))
+        self.assertEqual(self.by_id["experiments-toggle"][1]["aria-pressed"], "false")
+        self.assertEqual(self.by_id["workspace-read-only"][1]["role"], "status")
+        self.assertEqual(self.by_id["config-error"][1]["role"], "alert")
+        for identifier in ("advanced-query", "advanced-query-panel", "workspace-read-only", "config-error"):
+            self.assertIn("hidden", self.by_id[identifier][1])
+        self.assertEqual(self.by_id["check-dialog"][1]["aria-labelledby"], "check-title")
+        self.assertEqual(self.by_id["advanced-query-input"][1]["maxlength"], "500")
+
     def test_every_controlled_region_exists(self):
         for _, attrs in self.document.elements:
             for identifier in attrs.get("aria-controls", "").split():

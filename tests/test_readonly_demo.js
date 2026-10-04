@@ -1,6 +1,7 @@
-// JSC integration tests of the actual static adapter, app API and bound read-only entry points.
+// JSC integration tests of the frozen online Demo1 adapter and app. Demo2 has separate regression tests.
 // Browser-only rendering is replaced by the existing memory DOM boundary, never by API substitutes.
 var fixture = readFile("tests/test_navigation_ui.js");
+fixture = fixture.replace('readFile("static/app.js")', 'readFile("docs/app.js")');
 var boundaryEnd = fixture.indexOf("function runNavigationTests()");
 if (boundaryEnd < 0) throw new Error("Navigation test DOM boundary moved");
 eval(fixture.slice(0, boundaryEnd));
@@ -70,7 +71,7 @@ fetch = async (url, options = {}) => {
   if (path.endsWith("paths.json")) return response(demoPaths);
   throw new Error("Unexpected static request: " + path);
 };
-eval(readFile("demo/readonly-api.js"));
+eval(readFile("docs/readonly-api.js"));
 
 async function runReadonlyTests() {
   const before = JSON.stringify(demoWorkspace);
@@ -252,7 +253,7 @@ async function runReadonlyBindings() {
 const startup = source.lastIndexOf("\nsetTheme(state.theme);");
 if (startup < 0) throw new Error("Application startup boundary moved");
 let finished = false, failure = null;
-eval(readFile("static/motion.js") + "\n" + source.slice(0, startup) +
+eval(readFile("docs/motion.js") + "\n" + source.slice(0, startup) +
   "\n" + runReadonlyBindings.toString() + "\n(" + runReadonlyTests.toString() + ")().then(() => { finished = true; }, error => { failure = error; });");
 drainMicrotasks();
 if (failure) throw failure;

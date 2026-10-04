@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the public, read-only Pages demo from the bundled fictional workspace."""
+"""Build an independent Demo1 preview with the frozen legacy UI."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,11 @@ import genealogy_core as core
 
 
 def build(output_dir: Path | None = None) -> Path:
-    output = Path(output_dir) if output_dir is not None else ROOT / "docs"
+    if output_dir is None:
+        raise ValueError("Demo1 is frozen; specify an independent --output-dir.")
+    output = Path(output_dir)
+    if output.resolve().is_relative_to((ROOT / "docs").resolve()):
+        raise ValueError("The published docs tree is frozen; choose an independent output directory.")
     source = ROOT / "demo" / "data"
     workspace = core.ensure_workspace(json.loads((source / "workspace.json").read_text(encoding="utf-8")))
     portraits = []
@@ -39,19 +43,8 @@ def build(output_dir: Path | None = None) -> Path:
     (output / "photos").mkdir(exist_ok=True)
     for portrait, filename in portraits:
         shutil.copyfile(portrait, output / "photos" / filename)
-    for filename in ("styles.css", "motion.js", "app.js"):
-        shutil.copyfile(ROOT / "static" / filename, output / filename)
-    for filename in ("readonly-api.js", "readonly.css"):
-        shutil.copyfile(ROOT / "demo" / filename, output / filename)
-    html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    html = html.replace('href="/', 'href="./').replace('src="/', 'src="./')
-    html = html.replace("<title>Genea · 家族图册</title>", "<title>Genea · 公开只读演示</title>")
-    html = html.replace("Genea 家族图册：在本机整理代际、人物与亲子关系。",
-                        "浏览虚构示例家谱，体验人物档案、缩略导航与亲属关系查询。下载完整版可在本机编辑。")
-    html = html.replace('<body data-theme=', '<body data-readonly="true" data-theme=', 1)
-    html = html.replace("</head>", '  <link rel="stylesheet" href="./readonly.css" />\n  </head>', 1)
-    html = html.replace('<script src="./motion.js"', '<script src="./readonly-api.js" defer></script>\n    <script src="./motion.js"', 1)
-    (output / "index.html").write_text(html, encoding="utf-8")
+    for filename in ("index.html", "styles.css", "motion.js", "app.js", "readonly-api.js", "readonly.css"):
+        shutil.copyfile(ROOT / "docs" / filename, output / filename)
     for filename, value in (("workspace.json", workspace), ("paths.json", paths)):
         (output / filename).write_text(
             json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
@@ -63,7 +56,7 @@ def build(output_dir: Path | None = None) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, help="Output directory (default: repository docs/)")
+    parser.add_argument("--output-dir", type=Path, required=True, help="Independent preview directory outside the published docs tree")
     args = parser.parse_args()
     output = build(args.output_dir)
     print(f"Built read-only Pages demo: {output}")

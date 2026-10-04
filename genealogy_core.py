@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
+from kinship_inference import infer_direct_relationship
+
 COLORS = {
     "father_son": "father-son", "father_daughter": "father-daughter",
     "mother_son": "mother-son", "mother_daughter": "mother-daughter",
@@ -64,7 +66,7 @@ def remove_nonadjacent_relationships(workspace: dict) -> list[str]:
     workspace["relationships"] = kept
     return removed
 
-def add_generation(workspace: dict, placement: str, anchor_id: str | None = None, name: str | None = None) -> dict:
+def add_generation(workspace: dict, placement: str, anchor_id: str | None = None, name: str | None = None, *, allow_cross_generation: bool = False) -> dict:
     generations = workspace["generations"]
     if placement not in {"first", "above", "below"}: raise ValidationError("Invalid placement.")
     if placement == "first":
@@ -74,7 +76,8 @@ def add_generation(workspace: dict, placement: str, anchor_id: str | None = None
         anchor = _generation(workspace, anchor_id or "")
         index = anchor["position"] + (1 if placement == "below" else 0)
     generation = {"id": new_id("gen"), "name": (name or "").strip() or f"第{index + 1}层", "position": index}
-    generations.insert(index, generation); normalize_positions(workspace); remove_nonadjacent_relationships(workspace)
+    generations.insert(index, generation); normalize_positions(workspace)
+    if not allow_cross_generation: remove_nonadjacent_relationships(workspace)
     return generation
 
 def update_generation(workspace: dict, generation_id: str, changes: dict) -> dict:
@@ -132,15 +135,17 @@ def _standard_fields(workspace: dict, parent_id: str, child_id: str) -> dict:
     parent_label, child_label = LABELS[code]
     return {"kind": "standard", "code": code, "parent_label": parent_label, "child_label": child_label, "color_key": COLORS[code]}
 
-def _oriented(workspace: dict, source_id: str, target_id: str) -> tuple[str, str]:
+def _oriented(workspace: dict, source_id: str, target_id: str, *, allow_cross_generation: bool = False) -> tuple[str, str]:
     source, target = _person(workspace, source_id), _person(workspace, target_id)
     a = _generation(workspace, source["generation_id"])["position"]
     b = _generation(workspace, target["generation_id"])["position"]
-    if abs(a - b) != 1: raise ValidationError("People must be in adjacent generations.")
+    if allow_cross_generation:
+        if a == b: raise ValidationError("People must be in different generations.")
+    elif abs(a - b) != 1: raise ValidationError("People must be in adjacent generations.")
     return (source_id, target_id) if a < b else (target_id, source_id)
 
-def add_relationship(workspace: dict, source_id: str, target_id: str) -> dict:
-    parent_id, child_id = _oriented(workspace, source_id, target_id)
+def add_relationship(workspace: dict, source_id: str, target_id: str, *, allow_cross_generation: bool = False) -> dict:
+    parent_id, child_id = _oriented(workspace, source_id, target_id, allow_cross_generation=allow_cross_generation)
     if any(r["parent_id"] == parent_id and r["child_id"] == child_id for r in workspace["relationships"]):
         raise ConflictError("Relationship already exists.")
     timestamp = now(); relationship = {"id": new_id("rel"), "parent_id": parent_id, "child_id": child_id,
@@ -162,8 +167,22 @@ def update_relationship(workspace: dict, relationship_id: str, payload: dict) ->
     else: raise ValidationError("Invalid relationship kind.")
     relationship["updated_at"] = now(); return relationship
 
-def update_person(workspace: dict, person_id: str, payload: dict) -> tuple[dict, list[str]]:
-    person = _person(workspace, person_id)
+def _validate_person_relationship_order(workspace: dict, person_id: str, generation_id: str) -> None:
+    conflicts = []
+    for relationship in workspace["relationships"]:
+        if person_id not in {relationship["parent_id"], relationship["child_id"]}: continue
+        parent = _person(workspace, relationship["parent_id"])
+        child = _person(workspace, relationship["child_id"])
+        parent_generation = generation_id if parent["id"] == person_id else parent["generation_id"]
+        child_generation = generation_id if child["id"] == person_id else child["generation_id"]
+        if _generation(workspace, parent_generation)["position"] >= _generation(workspace, child_generation)["position"]:
+            conflicts.append(f'{parent["name"]} → {child["name"]}')
+    if conflicts:
+        raise ValidationError("父母必须位于子女上方；关系冲突：" + "、".join(conflicts))
+
+def update_person(workspace: dict, person_id: str, payload: dict, *, allow_cross_generation: bool = False) -> tuple[dict, list[str]]:
+    current = _person(workspace, person_id)
+    person = dict(current) if allow_cross_generation else current
     if "generation_id" in payload: _generation(workspace, payload["generation_id"]); person["generation_id"] = payload["generation_id"]
     if "gender" in payload:
         if payload["gender"] not in {"male", "female"}: raise ValidationError("Gender must be male or female.")
@@ -174,13 +193,19 @@ def update_person(workspace: dict, person_id: str, payload: dict) -> tuple[dict,
         person["name"] = payload["name"].strip()
     for key in ("introduction", "photo_path", "order"):
         if key in payload: person[key] = payload[key]
+    if allow_cross_generation:
+        if person["generation_id"] != current["generation_id"]:
+            _validate_person_relationship_order(workspace, person_id, person["generation_id"])
+        current.update(person)
+        person = current
     removed = []
     kept = []
     for relationship in workspace["relationships"]:
         if person_id in {relationship["parent_id"], relationship["child_id"]}:
-            try: parent_id, child_id = _oriented(workspace, relationship["parent_id"], relationship["child_id"])
-            except ValidationError: removed.append(relationship["id"]); continue
-            relationship["parent_id"], relationship["child_id"] = parent_id, child_id
+            if not allow_cross_generation:
+                try: parent_id, child_id = _oriented(workspace, relationship["parent_id"], relationship["child_id"])
+                except ValidationError: removed.append(relationship["id"]); continue
+                relationship["parent_id"], relationship["child_id"] = parent_id, child_id
             if relationship["kind"] == "standard": relationship.update(_standard_fields(workspace, relationship["parent_id"], relationship["child_id"]))
         kept.append(relationship)
     workspace["relationships"] = kept; person["updated_at"] = now()
@@ -213,3 +238,20 @@ def relationship_path(workspace: dict, from_id: str, to_id: str) -> dict:
             if neighbor == to_id: return {"path_text": "的".join([*labels, label]), "person_ids": [*people, neighbor], "relationship_ids": [*relationships, relationship_id]}
             seen.add(neighbor); queue.append((neighbor, [*people, neighbor], [*relationships, relationship_id], [*labels, label]))
     return {"path_text": "", "person_ids": [], "relationship_ids": []}
+
+
+def relationship_query(workspace: dict, from_id: str, to_id: str) -> dict:
+    """Keep the chain, infer blood kinship, and compose unsupported connections."""
+    from kinship_composition import compose_registered_connection
+    from kinship_appellation import infer_familiar_appellation
+
+    path = relationship_path(workspace, from_id, to_id)
+    direct = infer_direct_relationship(workspace, from_id, to_id)
+    if direct["status"] == "unsupported":
+        composition = compose_registered_connection(workspace, from_id, to_id)
+        if composition is not None:
+            direct["composition"] = composition
+        appellation = infer_familiar_appellation(workspace, from_id, to_id)
+        if appellation is not None:
+            direct["appellation"] = appellation
+    return {**path, "direct_relationship": direct}
